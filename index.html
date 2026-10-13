@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OKODAT Fleet License & Asset Tracking System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#312e81'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="h-full bg-slate-50 text-slate-800 font-sans antialiased flex flex-col">
+
+    <header class="bg-slate-900 text-white shadow-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-600 text-white p-2.5 rounded-xl shadow-lg flex items-center justify-center">
+                    <i class="fa-solid fa-truck-fast text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg tracking-wide flex items-center gap-2">
+                        OKODAT <span class="text-xs bg-indigo-500/30 text-indigo-300 px-2 py-0.5 rounded-full font-medium">FR07-78 &middot; Rev 0</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Integrated Management System &middot; Asset Register &middot; <span id="doc-updated"></span></p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <button onclick="openAddModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-sm transition flex items-center gap-2">
+                    <i class="fa-solid fa-plus"></i> <span class="hidden sm:inline">Add Record</span>
+                </button>
+                <button onclick="openBulk()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-xl text-sm font-semibold transition flex items-center gap-2 border border-slate-700" title="Bulk add trucks">
+                    <i class="fa-solid fa-truck-ramp-box text-xs"></i> <span class="hidden sm:inline">Bulk Add Trucks</span>
+                </button>
+                <div class="h-6 w-px bg-slate-700 hidden sm:block"></div>
+                <button onclick="exportToCSV()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-xl text-sm transition flex items-center gap-2 border border-slate-700" title="Export CSV">
+                    <i class="fa-solid fa-download text-xs"></i> <span class="hidden md:inline">Export</span>
+                </button>
+                <button onclick="resetToDefaults()" class="bg-slate-800 hover:bg-rose-900/40 text-slate-300 hover:text-rose-300 px-3 py-2 rounded-xl text-sm transition border border-slate-700" title="Reset Default Data">
+                    <i class="fa-solid fa-rotate-right text-xs"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 overflow-y-auto custom-scrollbar">
+        
+        <!-- KPI Cards Grid -->
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                    <span>Fleet Vehicles</span>
+                    <i class="fa-solid fa-truck text-indigo-600 bg-indigo-50 p-2 rounded-lg"></i>
+                </div>
+                <div class="mt-3 flex items-baseline justify-between">
+                    <span id="kpi-total" class="text-2xl font-bold text-slate-900">0</span>
+                    <span class="text-xs text-slate-400">On register</span>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                    <span>Valid Active</span>
+                    <i class="fa-solid fa-shield-check text-emerald-600 bg-emerald-50 p-2 rounded-lg"></i>
+                </div>
+                <div class="mt-3 flex items-baseline justify-between">
+                    <span id="kpi-valid" class="text-2xl font-bold text-emerald-600">0</span>
+                    <span class="text-xs text-emerald-600 font-medium">Up to date</span>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                    <span>Expiring Soon</span>
+                    <i class="fa-solid fa-triangle-exclamation text-amber-600 bg-amber-50 p-2 rounded-lg"></i>
+                </div>
+                <div class="mt-3 flex items-baseline justify-between">
+                    <span id="kpi-expiring" class="text-2xl font-bold text-amber-600">0</span>
+                    <span class="text-xs text-amber-600 font-medium">&lt; 30 days</span>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                    <span>Expired</span>
+                    <i class="fa-solid fa-circle-xmark text-rose-600 bg-rose-50 p-2 rounded-lg"></i>
+                </div>
+                <div class="mt-3 flex items-baseline justify-between">
+                    <span id="kpi-expired" class="text-2xl font-bold text-rose-600">0</span>
+                    <span class="text-xs text-rose-600 font-medium">Needs renewal</span>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between col-span-2 md:col-span-1">
+                <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                    <span>Scanned Files</span>
+                    <i class="fa-solid fa-file-shield text-blue-600 bg-blue-50 p-2 rounded-lg"></i>
+                </div>
+                <div class="mt-3 flex items-baseline justify-between">
+                    <span id="kpi-attachments" class="text-2xl font-bold text-blue-600">0</span>
+                    <span class="text-xs text-blue-600 font-medium">Digital docs</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Expiry alerts: always shown, ignores all filters -->
+        <div id="alerts-panel"></div>
+
+        <!-- Analytics by category -->
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+            <h2 class="font-bold text-slate-900 mb-1">Analytics by Category</h2>
+            <p class="text-xs text-slate-500 mb-4">Valid, expiring and expired records per document category. Click a category to filter the register.</p>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 relative h-72"><canvas id="cat-chart"></canvas></div>
+                <div id="cat-cards" class="space-y-2"></div>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+            <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
+                <!-- Search input -->
+                <div class="relative w-full md:w-80">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <i class="fa-solid fa-search"></i>
+                    </span>
+                    <input type="text" id="search-input" oninput="filterRecords()" placeholder="Search truck plate, document, remarks..." class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition">
+                </div>
+
+                <!-- Filters -->
+                <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                    <select id="status-filter" onchange="filterRecords()" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="ALL">All Statuses</option>
+                        <option value="VALID">Valid</option>
+                        <option value="EXPIRING">Expiring Soon</option>
+                        <option value="EXPIRED">Expired</option>
+                    </select>
+
+                    <select id="category-filter" onchange="filterRecords()" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="ALL">All Categories</option>
+                        <option value="Insurance">Insurance</option>
+                        <option value="Roadworthy">Roadworthy</option>
+                        <option value="Fire Extinguisher">Fire Extinguisher</option>
+                        <option value="Permit">Permit</option>
+                        <option value="Scanned Cheque">Scanned Cheque</option>
+                        <option value="Driver License">Driver License</option>
+                        <option value="Other">Other</option>
+                    </select>
+
+                    <select id="vehicle-filter" onchange="filterRecords()" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"><option value="ALL">All Vehicles</option></select>
+                    <!-- View Switcher -->
+                    <div class="flex bg-slate-100 p-1 rounded-xl border border-slate-200 ml-auto">
+                        <button onclick="switchView('table')" id="btn-view-table" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-indigo-600 shadow-sm transition">
+                            <i class="fa-solid fa-table-list mr-1"></i> Table
+                        </button>
+                        <button onclick="switchView('grid')" id="btn-view-grid" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition">
+                            <i class="fa-solid fa-grip mr-1"></i> Cards
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="records-container" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <!-- Populated via JavaScript -->
+        </div>
+</main>
+
+    
+<div id="record-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+<div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-100">
+<div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between"><h3 id="modal-title" class="font-bold text-lg"></h3>
+<button onclick="closeModal()" class="text-slate-400 hover:text-white p-2"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+<form id="record-form" onsubmit="handleFormSubmit(event)" class="p-6 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
+<input type="hidden" id="record-id">
+<datalist id="fleet-list"></datalist>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+<div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Vehicle No. *</label><input type="text" id="truck-plate" required list="fleet-list" placeholder="GN 5199-26" class="uppercase font-mono w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></div>
+<div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Category *</label><select id="doc-type" onchange="catChanged()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"><option>Insurance</option><option>Roadworthy</option><option>Fire Extinguisher</option><option>Permit</option><option>Driver License</option><option>Scanned Cheque</option><option>Other</option></select></div>
+<div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Queue No. <span class="normal-case font-normal text-slate-400">(auto)</span></label><input type="text" id="queue-no" readonly placeholder="Auto" title="Assigned automatically" class="w-full px-3 py-2 bg-slate-100 text-slate-600 font-mono border border-slate-200 rounded-xl text-sm cursor-not-allowed focus:outline-none"></div>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+<div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Date *</label><input type="date" id="issue-date" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></div>
+<div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Expiry Date *</label><input type="date" id="expiry-date" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></div>
+<div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Details</label><input type="text" id="details" placeholder="Policy / cert / cheque details" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></div>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+<div><label id="cost-label" class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Premium Due (GH&#8373;)</label><input type="number" id="cost" step="0.01" min="0" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></div>
+<div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">First Payment (GH&#8373;)</label><input type="number" id="pay1" step="0.01" min="0" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></div>
+<div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Second Payment (GH&#8373;)</label><input type="number" id="pay2" step="0.01" min="0" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></div>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+<div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Payment Date</label><input type="date" id="pay-date"  class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></div>
+<div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Cheque No.</label><input type="text" id="cheque-no" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></div>
+<div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Bank</label><input type="text" id="bank" placeholder="e.g. Stanbic" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></div>
+</div>
+<div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Remarks</label><textarea id="remarks" rows="2" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea></div>
+<div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Scanned Documents &amp; Cheques</label>
+<div id="pending-list" class="space-y-2 mb-2"></div>
+<div class="flex gap-2">
+<label class="flex-1 text-center border-2 border-dashed border-slate-300 rounded-xl p-3 cursor-pointer hover:border-indigo-500 text-xs font-semibold text-slate-600"><i class="fa-solid fa-cloud-arrow-up mr-1"></i> Upload files (PDF / image)<input type="file" accept="image/*,application/pdf" multiple onchange="addFiles(event)" class="hidden"></label>
+<label class="flex-1 text-center bg-slate-800 text-white rounded-xl p-3 cursor-pointer hover:bg-slate-700 text-xs font-semibold"><i class="fa-solid fa-camera mr-1"></i> Scan with camera<input type="file" accept="image/*" capture="environment" onchange="addFiles(event)" class="hidden"></label>
+</div></div>
+<div class="pt-4 flex justify-end gap-3 border-t border-slate-100">
+<button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+<button type="submit" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold">Save Record</button></div>
+</form></div></div>
+<div id="bulk-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+<div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[88vh]">
+<div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between"><h3 class="font-bold text-lg">Bulk Add Trucks</h3>
+<button onclick="closeBulk()" class="text-slate-400 hover:text-white p-2"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+<div class="p-6 space-y-4 overflow-y-auto custom-scrollbar">
+<div class="flex flex-col sm:flex-row gap-3">
+<button type="button" onclick="downloadTemplate()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white rounded-xl p-3 text-xs font-semibold"><i class="fa-solid fa-file-arrow-down mr-1"></i> Download template</button>
+<label class="flex-1 text-center border-2 border-dashed border-slate-300 rounded-xl p-3 cursor-pointer hover:border-indigo-500 text-xs font-semibold text-slate-600"><i class="fa-solid fa-cloud-arrow-up mr-1"></i> Upload filled template (.csv / .xlsx)<input type="file" id="bulk-file" accept=".csv,.xlsx,.xls" onchange="bulkFile(event)" class="hidden"></label>
+</div>
+<p class="text-xs text-slate-500">Columns: <b>Truck Number</b>, <b>Model</b>, <b>Year of Manufacture</b>. Trucks already on the register are removed automatically.</p>
+<div id="bulk-preview"></div>
+<div class="pt-4 flex justify-end gap-3 border-t border-slate-100">
+<button type="button" onclick="closeBulk()" class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+<button type="button" id="bulk-import" onclick="importBulk()" disabled class="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-xl text-sm font-semibold">Import Trucks</button></div>
+</div></div></div>
+<div id="alert-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+<div class="bg-white rounded-3xl shadow-2xl max-w-xl w-full overflow-hidden flex flex-col max-h-[85vh]">
+<div class="px-6 py-4 bg-rose-600 text-white flex items-center justify-between"><h3 class="font-bold"><i class="fa-solid fa-bell mr-2"></i>Expiry Alerts</h3>
+<button onclick="$('alert-modal').classList.add('hidden')" class="text-rose-100 hover:text-white p-2"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+<div id="alert-modal-list" class="p-5 overflow-y-auto custom-scrollbar space-y-2"></div></div></div>
+<div id="viewer-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+<div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[88vh]">
+<div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between"><h3 id="viewer-title" class="font-bold"></h3>
+<button onclick="closeViewer()" class="text-slate-400 hover:text-white p-2"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+<div id="viewer-content" class="p-6 flex-1 overflow-y-auto bg-slate-100 space-y-4"></div>
+<div id="viewer-meta" class="px-6 py-3 border-t text-xs text-slate-500"></div></div></div>
+
+<script>
+const DEFAULT_FLEET = ["GN 5199-26", "GN 6199-26", "GN 7199-26", "GM 7199-25", "GN 5199-24", "GN 6199-24", "GN 7199-24", "GN 9199-24", "GT 8199-24", "GT 9199-24", "GN 5199-23", "GN 6199-23", "GN 8199-23", "GN 9199-23", "GT 6199-23", "GT 7199-23", "GT 9199-23", "GN 3199-22", "GN 4199-22", "GN 5199-22", "GN 6199-22", "GN 7199-22", "GN 8199-22", "GN 9199-22", "GC 9199-22", "GN 7199-20", "GN 8199-20", "GT 5199-18", "GT 6199-18", "GT 7199-18", "GT 8199-18", "GT 9199-18", "GT 5199-15", "GT 6199-15", "OK 6199-24", "OK 8199-24", "OK 9199-24", "OK 5199-25", "OK 6199-25", "OK 7199-25", "OK 8199-25", "OK 9199-25", "OK 7199-26", "GN 2642-13", "GN 2644-13", "GN 2643-13", "GN 2645-13", "GN 2646-13", "GE 7199-12", "GT 5199-12", "GT 7199-12", "GT 7199-Z", "GN 3331-18", "GN 4740-19", "GN 3572-21", "GT 7974-21", "GT 6305-22", "GN 1510-23", "GT 4920-23", "GT 8826-21", "BA 2888-23", "GT 7724-26", "GT 7725-26"];
+const KEY = 'okodat_register_v2', FKEY = 'okodat_fleet_v1';
+const CATEGORIES = ['Insurance','Roadworthy','Fire Extinguisher','Permit','Driver License','Scanned Cheque','Other'];
+let fleet = [], catChart = null;
+const normPlate = s => String(s ?? '').trim().toUpperCase().replace(/\s+/g, ' ');
+const plateKey = s => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const plates = () => fleet.map(t => t.plate);
+const truckOf = p => fleet.find(t => plateKey(t.plate) === plateKey(p));
+const saveFleet = () => scheduleSync();
+const KINDS = ['Document','Cheque','Cheque - 1st Payment','Cheque - 2nd Payment'];
+let records = [], currentView = 'table', pending = [], removed = [];
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = n => n ? 'GH₵ ' + Number(n).toLocaleString('en-GH', {minimumFractionDigits: 2}) : '—';
+const rid = () => 'R' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+
+// =====================================================================
+// GOOGLE SHEETS BACKEND  (replaces localStorage + IndexedDB)
+// 1) Deploy Code.gs as a Web App  2) paste its /exec URL + token below
+// =====================================================================
+const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzvTuxIBYxmxqRgrGTP25wVcIZ4N0wsGyCuJLyIFpZ9WBpjIObb6QNz563KyHR_6Z0Mpw/exec';   // e.g. https://script.google.com/macros/s/XXXX/exec
+const SHEETS_TOKEN   = 'okt-91498db6dd2c5ca44377bae5';       // must be identical to TOKEN in Code.gs
+
+// Legacy browser storage - only read ONCE to migrate old data into the Sheet
+const idb = new Promise((res, rej) => { const q = indexedDB.open('okodat_files', 1); q.onupgradeneeded = () => q.result.createObjectStore('f'); q.onsuccess = () => res(q.result); q.onerror = rej; });
+const fx = async (mode, fn) => { const d = await idb; return new Promise(r => { const t = d.transaction('f', mode), q = fn(t.objectStore('f')); t.oncomplete = () => r(q && q.result); }); };
+const lget = k => fx('readonly', s => s.get(k));
+
+// ---- network ----
+async function api(action, payload = {}, tries = 3) {
+  let err;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const res = await fetch(SHEETS_API_URL, {method: 'POST', body: JSON.stringify({token: SHEETS_TOKEN, action, ...payload})});
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      const j = await res.json();
+      if (!j.ok) { const e = new Error(j.error || 'Request failed'); e.fatal = true; throw e; }
+      return j;
+    } catch (e) { err = e; if (e.fatal) break; await new Promise(r => setTimeout(r, 800 * (i + 1))); }
+  }
+  throw err;
+}
+
+// ---- small status pill + loading overlay (created by JS, no HTML changes) ----
+const syncPill = document.createElement('div');
+syncPill.className = 'fixed bottom-5 left-5 z-40 px-3 py-1.5 rounded-full text-xs font-semibold shadow bg-white border border-slate-200';
+document.body.appendChild(syncPill);
+function setSync(s) {
+  const m = {loading: ['fa-spinner fa-spin', 'Loading…', 'text-slate-600'], saving: ['fa-cloud-arrow-up', 'Saving…', 'text-amber-600'],
+             saved: ['fa-cloud', 'Synced with Google Sheets', 'text-emerald-600'], error: ['fa-triangle-exclamation', 'Not synced – retrying…', 'text-rose-600']}[s];
+  syncPill.className = 'fixed bottom-5 left-5 z-40 px-3 py-1.5 rounded-full text-xs font-semibold shadow bg-white border border-slate-200 ' + m[2];
+  syncPill.innerHTML = `<i class="fa-solid ${m[0]} mr-1"></i>${m[1]}`;
+}
+const overlay = document.createElement('div');
+overlay.className = 'hidden fixed inset-0 z-[60] bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center gap-3 text-slate-700 p-6 text-center';
+document.body.appendChild(overlay);
+const showOverlay = h => { overlay.innerHTML = h; overlay.classList.remove('hidden'); };
+
+// ---- change tracking: we diff against what the Sheet already has, so existing code keeps calling saveRecords()/saveFleet() unchanged ----
+const synced = {records: new Map(), fleet: new Map()};
+const fk = t => plateKey(t.plate);
+function snapshot() {
+  synced.records = new Map(records.map(r => [r.id, JSON.stringify(r)]));
+  synced.fleet = new Map(fleet.map(t => [fk(t), JSON.stringify(t)]));
+}
+let syncing = false, dirty = false, syncTimer = null, retryTimer = null, failedOnce = false, refreshing = false, fileDel = [];
+const pendingSync = () => dirty || syncing || fileDel.length > 0;
+
+function scheduleSync() { dirty = true; setSync('saving'); clearTimeout(syncTimer); syncTimer = setTimeout(flush, 300); }
+
+async function flush() {
+  if (syncing) return;
+  clearTimeout(retryTimer);
+  syncing = true;
+  try {
+    while (dirty || fileDel.length) {
+      dirty = false;
+      const rNow = new Map(records.map(r => [r.id, JSON.stringify(r)])), fNow = new Map(fleet.map(t => [fk(t), JSON.stringify(t)]));
+      const recordUpserts = records.filter(r => synced.records.get(r.id) !== rNow.get(r.id));
+      const recordDeletes = [...synced.records.keys()].filter(id => !rNow.has(id));
+      const fleetUpserts = fleet.filter(t => synced.fleet.get(fk(t)) !== fNow.get(fk(t)));
+      const del = fileDel.splice(0);
+      try {
+        if (recordUpserts.length || recordDeletes.length || fleetUpserts.length) await api('sync', {recordUpserts, recordDeletes, fleetUpserts});
+        synced.records = rNow; synced.fleet = fNow;
+        if (del.length) await api('deleteFiles', {ids: del});
+      } catch (e) { fileDel.unshift(...del); dirty = true; throw e; }
+    }
+    failedOnce = false; setSync('saved');
+  } catch (e) {
+    setSync('error');
+    if (!failedOnce) { failedOnce = true; showNotification('Could not sync with Google Sheets: ' + e.message + ' - retrying…'); }
+    retryTimer = setTimeout(flush, 10000);
+  } finally { syncing = false; }
+}
+window.addEventListener('beforeunload', e => { if (pendingSync()) { e.preventDefault(); e.returnValue = ''; } });
+
+// ---- scanned files now live in a Google Drive folder (Sheets cells can't hold big files) ----
+const fcache = new Map();
+async function fput(k, v) {
+  setSync('saving');
+  try { await api('putFile', {id: k, data: v.data}); }
+  catch (e) { setSync('error'); showNotification('Upload failed: ' + e.message); throw e; }
+  fcache.set(k, v.data);
+  if (!pendingSync()) setSync('saved');
+}
+async function fget(k) {
+  if (fcache.has(k)) return {data: fcache.get(k)};
+  try { const j = await api('getFile', {id: k}); if (!j.found) return null; fcache.set(k, j.data); return {data: j.data}; }
+  catch (e) { showNotification('Could not load file: ' + e.message); return null; }
+}
+const fdel = k => { fcache.delete(k); fileDel.push(k); scheduleSync(); return Promise.resolve(); };
+
+function shrink(file) {
+  return new Promise(res => {
+    if (!file.type.startsWith('image/')) { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(file); return; }
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, 1800 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = img.width * s; c.height = img.height * s;
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src); res(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+// First run only (Sheet is empty): bring over data already stored in this browser, otherwise seed the default fleet
+async function firstRunSetup() {
+  let lf = null, lr = [];
+  try { lf = JSON.parse(localStorage.getItem(FKEY) || 'null'); } catch (e) {}
+  try { lr = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) {}
+  fleet = Array.isArray(lf) && lf.length ? lf : DEFAULT_FLEET.map(p => ({plate: p, model: '', year: ''}));
+  records = Array.isArray(lr) ? lr : [];
+  const total = records.reduce((n, r) => n + (r.files || []).length, 0); let done = 0;
+  for (const r of records) for (const f of r.files || []) {
+    showOverlay(`<i class="fa-solid fa-spinner fa-spin text-2xl text-indigo-600"></i><p class="text-sm font-semibold">Moving your existing scans to Google (${++done}/${total})…</p>`);
+    try { const d = await lget(f.id); if (d && d.data) await fput(f.id, d); } catch (e) { /* keep going */ }
+  }
+  showOverlay('<i class="fa-solid fa-spinner fa-spin text-2xl text-indigo-600"></i><p class="text-sm font-semibold">Saving to Google Sheets…</p>');
+  dirty = true; await flush();
+}
+
+async function loadFromSheet() {
+  if (/PASTE_/.test(SHEETS_API_URL)) {
+    showOverlay('<i class="fa-solid fa-plug-circle-xmark text-3xl text-rose-500"></i><p class="font-bold">Google Sheets is not connected yet</p><p class="text-sm max-w-md">Open the HTML file and paste your Apps Script Web App URL into <code>SHEETS_API_URL</code> (and your token into <code>SHEETS_TOKEN</code>).</p>');
+    return false;
+  }
+  showOverlay('<i class="fa-solid fa-spinner fa-spin text-2xl text-indigo-600"></i><p class="text-sm font-semibold">Loading from Google Sheets…</p>');
+  setSync('loading');
+  let data;
+  try { data = await api('load'); }
+  catch (e) {
+    setSync('error');
+    showOverlay(`<i class="fa-solid fa-triangle-exclamation text-3xl text-rose-500"></i><p class="font-bold">Could not reach Google Sheets</p><p class="text-sm max-w-md">${esc(e.message)}</p><button onclick="startApp()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold">Retry</button>`);
+    return false;
+  }
+  fleet = data.fleet || []; records = data.records || [];
+  if (data.initialized) snapshot(); else await firstRunSetup();
+  overlay.classList.add('hidden'); setSync('saved');
+  return true;
+}
+
+// Pick up edits made directly in the Sheet (or by other users) without a reload
+async function refreshFromSheet() {
+  if (refreshing || pendingSync() || document.hidden || !$('record-modal').classList.contains('hidden') || !$('bulk-modal').classList.contains('hidden')) return;
+  refreshing = true;
+  try {
+    const d = await api('load', {}, 1);
+    if (pendingSync() || !d.initialized) return;
+    const rm = new Map(d.records.map(r => [r.id, JSON.stringify(r)])), fm = new Map(d.fleet.map(t => [fk(t), JSON.stringify(t)]));
+    const same = (a, b) => a.size === b.size && [...a].every(([k, v]) => b.get(k) === v);
+    if (same(rm, synced.records) && same(fm, synced.fleet)) return;
+    fleet = d.fleet; records = d.records; snapshot(); refreshFleetUI(); renderDashboard();
+  } catch (e) { /* silent; next tick tries again */ } finally { refreshing = false; }
+}
+setInterval(refreshFromSheet, 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshFromSheet(); });
+
+async function startApp() {
+  if (!await loadFromSheet()) return;
+  refreshFleetUI();
+  $('doc-updated').textContent = 'Updated ' + new Date().toLocaleDateString('en-GB');
+  renderDashboard();
+  setTimeout(() => { const a = alertItems(); if (a.length) { $('alert-modal-list').innerHTML = alertListHtml(a); $('alert-modal').classList.remove('hidden'); } }, 400);
+}
+window.onload = startApp;
+const saveRecords = () => { scheduleSync(); renderDashboard(); };
+
+async function resetToDefaults() {
+  if (!confirm('Delete ALL records and scanned files? This cannot be undone.')) return;
+  for (const r of records) for (const f of r.files || []) await fdel(f.id);
+  records = []; saveRecords(); showNotification('Register cleared');
+}
+
+function getStatus(d) {
+  const t = new Date(); t.setHours(0,0,0,0);
+  const e = new Date(d); e.setHours(0,0,0,0);
+  const n = Math.ceil((e - t) / 864e5);
+  return n < 0 ? 'EXPIRED' : n <= 30 ? 'EXPIRING' : 'VALID';
+}
+const BADGE = {VALID:['Valid','bg-emerald-50 text-emerald-700 border-emerald-200'], EXPIRING:['Expiring Soon','bg-amber-50 text-amber-700 border-amber-200'], EXPIRED:['Expired','bg-rose-50 text-rose-700 border-rose-200']};
+const badge = r => { const [t, c] = BADGE[getStatus(r.expiryDate)]; return `<span class="px-3 py-1 rounded-full text-xs font-semibold border ${c}">${t}</span>`; };
+const fileBtn = r => (r.files && r.files.length) ? `<button onclick="openViewer('${r.id}')" class="text-indigo-600 text-xs font-semibold bg-indigo-50 px-2.5 py-1 rounded-lg"><i class="fa-solid fa-paperclip"></i> ${r.files.length} scan${r.files.length > 1 ? 's' : ''}</button>` : '<span class="text-xs text-slate-400 italic">No file</span>';
+const actions = r => `<button onclick="openEditModal('${r.id}')" class="p-2 text-slate-400 hover:text-indigo-600" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button><button onclick="deleteRecord('${r.id}')" class="p-2 text-slate-400 hover:text-rose-600" title="Delete"><i class="fa-solid fa-trash"></i></button>`;
+
+function renderDashboard() {
+  const c = {VALID:0, EXPIRING:0, EXPIRED:0};
+  records.forEach(r => c[getStatus(r.expiryDate)]++);
+  $('kpi-total').textContent = fleet.length;
+  $('kpi-valid').textContent = c.VALID; $('kpi-expiring').textContent = c.EXPIRING; $('kpi-expired').textContent = c.EXPIRED;
+  $('kpi-attachments').textContent = records.reduce((n, r) => n + (r.files || []).length, 0);
+  renderAlerts(); renderAnalytics();
+  filterRecords();
+}
+
+function filterRecords() {
+  const q = $('search-input').value.toLowerCase(), st = $('status-filter').value, ct = $('category-filter').value, vh = $('vehicle-filter').value;
+  const ix = p => { const k = plates().findIndex(x => plateKey(x) === plateKey(p)); return k < 0 ? 999 : k; };
+  const data = records.filter(r =>
+    [r.plate, r.category, r.remarks, r.details, r.queueNo, r.chequeNo, r.bank].join(' ').toLowerCase().includes(q) &&
+    (st === 'ALL' || getStatus(r.expiryDate) === st) && (ct === 'ALL' || r.category === ct) && (vh === 'ALL' || r.plate === vh)
+  ).sort((a, b) => ix(a.plate) - ix(b.plate) || b.issueDate.localeCompare(a.issueDate));
+  const box = $('records-container');
+  if (!data.length) { box.innerHTML = `<div class="p-12 text-center text-slate-400"><i class="fa-solid fa-folder-open text-4xl mb-3"></i><p class="text-sm font-medium">${records.length ? 'No records match your filters.' : 'No records yet. Click “Add Record” to start the register.'}</p></div>`; return; }
+  box.innerHTML = currentView === 'table' ? tableHtml(data) : gridHtml(data);
+}
+
+function tableHtml(data) {
+  const th = t => `<th class="p-3">${t}</th>`;
+  return `<div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead><tr class="bg-slate-50 border-b text-xs font-bold text-slate-500 uppercase tracking-wider">${['No.','Vehicle No.','Category / Details','Date · Queue No.','Premium Due','1st Payment','2nd Payment · Date','Expiry · Status','Scans',''].map(th).join('')}</tr></thead><tbody class="divide-y divide-slate-100">` +
+  data.map((r, n) => `<tr class="hover:bg-slate-50/80 align-top">
+    <td class="p-3 text-xs text-slate-400">${n + 1}</td>
+    <td class="p-3 font-bold font-mono text-slate-900 whitespace-nowrap">${esc(r.plate)}${truckInfo(r.plate)}</td>
+    <td class="p-3"><span class="font-medium">${esc(r.category)}</span><p class="text-xs text-slate-400 max-w-[14rem] truncate">${esc(r.details || r.remarks || '')}</p>${r.chequeNo ? `<p class="text-xs text-slate-500 font-mono">Chq ${esc(r.chequeNo)} ${esc(r.bank)}</p>` : ''}</td>
+    <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${esc(r.issueDate)}<br><span class="text-slate-400">${esc(r.queueNo || '—')}</span></td>
+    <td class="p-3 font-mono text-xs">${money(r.cost)}</td>
+    <td class="p-3 font-mono text-xs">${money(r.pay1)}</td>
+    <td class="p-3 font-mono text-xs">${money(r.pay2)}<br><span class="text-slate-400">${esc(r.payDate || '')}</span></td>
+    <td class="p-3 whitespace-nowrap"><div class="text-xs font-semibold mb-1">${esc(r.expiryDate)}</div>${badge(r)}</td>
+    <td class="p-3">${fileBtn(r)}</td>
+    <td class="p-3 text-right whitespace-nowrap">${actions(r)}</td></tr>`).join('') + '</tbody></table></div>';
+}
+
+function gridHtml(data) {
+  const row = (a, b) => `<div class="flex justify-between"><span class="font-semibold text-slate-500">${a}</span><span class="font-mono text-slate-900">${b}</span></div>`;
+  return '<div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">' + data.map(r => `
+    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+      <div class="flex items-start justify-between"><div><span class="text-xs text-slate-400">${esc(r.category)} · ${esc(r.queueNo || 'no queue no.')}</span><h3 class="text-lg font-bold font-mono">${esc(r.plate)}</h3>${truckInfo(r.plate)}</div>${badge(r)}</div>
+      <div class="space-y-1.5 text-xs bg-slate-50 p-3 rounded-xl">${row('Date', esc(r.issueDate))}${row('Expires', esc(r.expiryDate))}${row('Premium Due', money(r.cost))}${row('1st Payment', money(r.pay1))}${row('2nd Payment', money(r.pay2))}${r.chequeNo ? row('Cheque', esc(r.chequeNo) + ' ' + esc(r.bank)) : ''}</div>
+      <p class="text-xs text-slate-500 italic line-clamp-2">${esc(r.details || r.remarks || '')}</p>
+      <div class="pt-3 border-t flex items-center justify-between">${fileBtn(r)}<div>${actions(r)}</div></div></div>`).join('') + '</div>';
+}
+
+function switchView(v) {
+  currentView = v;
+  const on = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-indigo-600 shadow-sm', off = 'px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900';
+  $('btn-view-table').className = v === 'table' ? on : off; $('btn-view-grid').className = v === 'grid' ? on : off;
+  filterRecords();
+}
+
+// Form
+function catChanged() {
+  const chq = $('doc-type').value === 'Scanned Cheque';
+  $('cost-label').innerHTML = chq ? 'Cheque Amount (GH&#8373;)' : 'Premium Due (GH&#8373;)';
+  if (!$('record-id').value) {
+    const d = new Date($('issue-date').value || Date.now()); d.setMonth(d.getMonth() + (chq ? 6 : 12));
+    $('expiry-date').value = d.toISOString().split('T')[0];
+  }
+}
+function nextQueueNo() {
+  let max = 0;
+  records.forEach(r => { const m = String(r.queueNo || '').match(/(\d+)\s*$/); if (m) max = Math.max(max, parseInt(m[1], 10)); });
+  return String(max + 1).padStart(3, '0');
+}
+function openAddModal() {
+  $('record-form').reset(); $('record-id').value = ''; pending = []; removed = [];
+  $('modal-title').textContent = 'Add Register Record';
+  $('issue-date').value = new Date().toISOString().split('T')[0];
+  $('queue-no').value = nextQueueNo();
+  catChanged(); renderPending(); $('record-modal').classList.remove('hidden');
+}
+function openEditModal(id) {
+  const r = records.find(x => x.id === id); if (!r) return;
+  $('record-form').reset(); pending = (r.files || []).map(f => ({...f})); removed = [];
+  $('modal-title').textContent = 'Edit Record: ' + r.plate;
+  $('record-id').value = r.id;
+  const m = {'truck-plate':'plate','doc-type':'category','issue-date':'issueDate','expiry-date':'expiryDate','queue-no':'queueNo',details:'details',cost:'cost',pay1:'pay1',pay2:'pay2','pay-date':'payDate','cheque-no':'chequeNo',bank:'bank',remarks:'remarks'};
+  for (const k in m) $(k).value = r[m[k]] ?? '';
+  catChanged(); renderPending(); $('record-modal').classList.remove('hidden');
+}
+const closeModal = () => $('record-modal').classList.add('hidden');
+
+function renderPending() {
+  $('pending-list').innerHTML = pending.map((p, i) => `<div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+    <i class="fa-solid ${p.name.toLowerCase().endsWith('.pdf') ? 'fa-file-pdf' : 'fa-image'} text-indigo-500"></i>
+    <span class="flex-1 text-xs truncate">${esc(p.name)}</span>
+    <select onchange="pending[${i}].kind=this.value" class="text-xs bg-white border border-slate-200 rounded-lg px-2 py-1">${KINDS.map(k => `<option ${k === p.kind ? 'selected' : ''}>${k}</option>`).join('')}</select>
+    <button type="button" onclick="removeFile(${i})" class="text-slate-400 hover:text-rose-600"><i class="fa-solid fa-xmark"></i></button></div>`).join('');
+}
+function removeFile(i) { const p = pending.splice(i, 1)[0]; if (!p.data) removed.push(p.id); renderPending(); }
+async function addFiles(e) {
+  const chq = $('doc-type').value === 'Scanned Cheque';
+  for (const f of e.target.files) {
+    if (f.size > 15e6) { alert(f.name + ' is larger than 15 MB and was skipped.'); continue; }
+    pending.push({id: rid(), name: f.name, kind: chq ? 'Cheque' : 'Document', data: await shrink(f)});
+  }
+  e.target.value = ''; renderPending();
+}
+
+async function handleFormSubmit(e) {
+  e.preventDefault();
+  const id = $('record-id').value, v = k => $(k).value.trim(), n = k => parseFloat($(k).value) || 0;
+  for (const p of pending) if (p.data) { await fput(p.id, {data: p.data}); delete p.data; }
+  for (const k of removed) await fdel(k);
+  const rec = {id: id || rid(), plate: v('truck-plate').toUpperCase(), category: $('doc-type').value, issueDate: $('issue-date').value, expiryDate: $('expiry-date').value,
+    queueNo: v('queue-no'), details: v('details'), cost: n('cost'), pay1: n('pay1'), pay2: n('pay2'), payDate: $('pay-date').value,
+    chequeNo: v('cheque-no'), bank: v('bank'), remarks: v('remarks'), files: pending.map(({id, name, kind}) => ({id, name, kind}))};
+  if (!truckOf(rec.plate)) { fleet.push({plate: rec.plate, model: '', year: ''}); saveFleet(); refreshFleetUI(); }
+  const i = records.findIndex(r => r.id === id);
+  if (i >= 0) records[i] = rec; else records.unshift(rec);
+  saveRecords(); closeModal(); showNotification(i >= 0 ? 'Record updated' : 'Record added');
+}
+async function deleteRecord(id) {
+  if (!confirm('Delete this record and its scanned files?')) return;
+  const r = records.find(x => x.id === id);
+  for (const f of (r && r.files) || []) await fdel(f.id);
+  records = records.filter(x => x.id !== id); saveRecords(); showNotification('Record deleted');
+}
+
+// Viewer
+async function openViewer(id) {
+  const r = records.find(x => x.id === id); if (!r) return;
+  $('viewer-title').textContent = r.category + ' - ' + r.plate;
+  $('viewer-meta').textContent = `Queue No: ${r.queueNo || '—'} | Expires: ${r.expiryDate}`;
+  $('viewer-content').innerHTML = '<p class="text-xs text-slate-400">Loading…</p>';
+  $('viewer-modal').classList.remove('hidden');
+  let h = '';
+  for (const f of r.files) {
+    const d = await fget(f.id), s = d && d.data;
+    h += `<div class="space-y-1"><p class="text-xs font-semibold text-slate-600">${esc(f.kind)} · ${esc(f.name)}</p>` +
+      (!s ? '<p class="text-xs text-slate-400">File missing from this browser.</p>' : s.startsWith('data:application/pdf') ? `<iframe src="${s}" class="w-full h-96 rounded-xl border"></iframe>` : `<img src="${s}" class="w-full rounded-xl shadow" alt="scan">`) + '</div>';
+  }
+  $('viewer-content').innerHTML = h;
+}
+const closeViewer = () => $('viewer-modal').classList.add('hidden');
+
+// Export in the register's column order
+function exportToCSV() {
+  const q = s => '"' + String(s ?? '').replace(/"/g, '""') + '"';
+  const rows = [['NO.','VEHICLE NO.','DATE','QUEUE NO.','DETAILS','PREMIUM DUE','FIRST PAYMENT','SECOND PAYMENT','PAYMENT DATE','REMARKS','CATEGORY','EXPIRY DATE','STATUS','CHEQUE NO.','BANK','SCANS']];
+  records.forEach((r, i) => rows.push([i + 1, r.plate, r.issueDate, r.queueNo, r.details, r.cost, r.pay1, r.pay2, r.payDate, r.remarks, r.category, r.expiryDate, getStatus(r.expiryDate), r.chequeNo, r.bank, (r.files || []).length]));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.map(r => r.map(q).join(',')).join('\n')], {type: 'text/csv'}));
+  a.download = 'okodat_asset_register_' + new Date().toISOString().split('T')[0] + '.csv'; a.click();
+}
+
+// ---------- Fleet helpers ----------
+function truckInfo(p) {
+  const t = truckOf(p); if (!t || (!t.model && !t.year)) return '';
+  return `<span class="block text-xs font-sans font-normal text-slate-400">${esc([t.model, t.year].filter(Boolean).join(' · '))}</span>`;
+}
+function refreshFleetUI() {
+  $('fleet-list').innerHTML = plates().map(v => `<option value="${esc(v)}">`).join('');
+  const cur = $('vehicle-filter').value;
+  $('vehicle-filter').innerHTML = '<option value="ALL">All Vehicles</option>' + plates().map(v => `<option>${esc(v)}</option>`).join('');
+  $('vehicle-filter').value = plates().includes(cur) ? cur : 'ALL';
+  $('kpi-total').textContent = fleet.length;
+}
+
+// ---------- Expiry alerts (all categories, ignores filters) ----------
+const daysLeft = d => { const t = new Date(); t.setHours(0,0,0,0); const e = new Date(d); e.setHours(0,0,0,0); return Math.ceil((e - t) / 864e5); };
+function alertItems() {
+  return records.map(r => ({r, d: daysLeft(r.expiryDate), s: getStatus(r.expiryDate)})).filter(x => x.s !== 'VALID').sort((a, b) => a.d - b.d);
+}
+function alertListHtml(items) {
+  return items.map(({r, d, s}) => {
+    const c = s === 'EXPIRED' ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-amber-50 border-amber-200 text-amber-700';
+    const t = d < 0 ? `Expired ${-d} day${-d > 1 ? 's' : ''} ago` : d === 0 ? 'Expires today' : `Expires in ${d} day${d > 1 ? 's' : ''}`;
+    return `<div class="flex items-center justify-between gap-3 px-3 py-2 rounded-xl border ${c}"><div class="min-w-0"><span class="font-mono font-bold text-sm">${esc(r.plate)}</span> <span class="text-xs">· ${esc(r.category)}</span></div><span class="text-xs font-semibold whitespace-nowrap">${t} (${esc(r.expiryDate)})</span></div>`;
+  }).join('');
+}
+function renderAlerts() {
+  const a = alertItems(), box = $('alerts-panel');
+  if (!a.length) { box.innerHTML = ''; return; }
+  const ex = a.filter(x => x.s === 'EXPIRED').length;
+  box.innerHTML = `<div class="bg-white rounded-2xl shadow-sm border border-rose-200 p-4"><div class="flex items-center gap-2 mb-3"><i class="fa-solid fa-bell text-rose-600"></i><h2 class="font-bold text-slate-900">Expiry Alerts</h2><span class="text-xs text-slate-500">${ex} expired · ${a.length - ex} expiring within 30 days · all categories</span></div><div class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">${alertListHtml(a)}</div></div>`;
+}
+
+// ---------- Analytics by category ----------
+function renderAnalytics() {
+  const cats = [...new Set([...CATEGORIES, ...records.map(r => r.category)])];
+  const st = Object.fromEntries(cats.map(c => [c, {VALID: 0, EXPIRING: 0, EXPIRED: 0}]));
+  records.forEach(r => st[r.category][getStatus(r.expiryDate)]++);
+  $('cat-cards').innerHTML = cats.map(c => { const x = st[c], n = x.VALID + x.EXPIRING + x.EXPIRED;
+    return `<button onclick="$('category-filter').value='${esc(c)}';filterRecords();$('records-container').scrollIntoView({behavior:'smooth'})" class="w-full text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-xl px-3 py-2"><div class="flex justify-between text-sm font-semibold"><span>${esc(c)}</span><span class="text-slate-400">${n}</span></div><div class="text-xs mt-0.5"><span class="text-emerald-600">${x.VALID} valid</span> · <span class="text-amber-600">${x.EXPIRING} expiring</span> · <span class="text-rose-600">${x.EXPIRED} expired</span></div></button>`; }).join('');
+  if (typeof Chart === 'undefined') return;
+  if (catChart) catChart.destroy();
+  const ds = (k, label, color) => ({label, data: cats.map(c => st[c][k]), backgroundColor: color});
+  catChart = new Chart($('cat-chart'), {type: 'bar', data: {labels: cats, datasets: [ds('VALID', 'Valid', '#10b981'), ds('EXPIRING', 'Expiring Soon', '#f59e0b'), ds('EXPIRED', 'Expired', '#f43f5e')]},
+    options: {responsive: true, maintainAspectRatio: false, scales: {x: {stacked: true}, y: {stacked: true, beginAtZero: true, ticks: {precision: 0}}}, plugins: {legend: {position: 'bottom'}}}});
+}
+
+// ---------- Bulk truck upload ----------
+let bulkRows = [];
+const closeBulk = () => $('bulk-modal').classList.add('hidden');
+function openBulk() { bulkRows = []; $('bulk-file').value = ''; $('bulk-preview').innerHTML = ''; $('bulk-import').disabled = true; $('bulk-modal').classList.remove('hidden'); }
+function downloadTemplate() {
+  const csv = '\ufeffTruck Number,Model,Year of Manufacture\nGN 1234-26,Volvo FH16,2020\nGT 5678-25,MAN TGS,2018\n';
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
+  a.download = 'okodat_truck_upload_template.csv'; a.click();
+}
+function parseCSV(t) {
+  const rows = []; let row = [], f = '', q = false;
+  t = t.replace(/^\ufeff/, '');
+  for (let i = 0; i < t.length; i++) { const c = t[i];
+    if (q) { if (c === '"' && t[i + 1] === '"') { f += '"'; i++; } else if (c === '"') q = false; else f += c; }
+    else if (c === '"') q = true; else if (c === ',') { row.push(f); f = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; row.push(f); rows.push(row); row = []; f = ''; }
+    else f += c; }
+  if (f || row.length) { row.push(f); rows.push(row); }
+  return rows;
+}
+async function bulkFile(e) {
+  const file = e.target.files[0]; if (!file) return;
+  let table;
+  try {
+    if (/\.xlsx?$/i.test(file.name)) {
+      if (typeof XLSX === 'undefined') throw new Error('Excel reader not loaded. Save the file as CSV and upload again.');
+      const wb = XLSX.read(await file.arrayBuffer()); table = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header: 1, raw: false, defval: ''});
+    } else table = parseCSV(await file.text());
+  } catch (err) { $('bulk-preview').innerHTML = `<p class="text-sm text-rose-600">${esc(err.message)}</p>`; return; }
+  table = table.filter(r => r.some(c => String(c).trim()));
+  const hd = (table[0] || []).map(h => String(h).toLowerCase());
+  const find = (re, d) => { const i = hd.findIndex(h => re.test(h)); return i < 0 ? d : i; };
+  const ci = find(/truck|vehicle|plate|reg/, 0), mi = find(/model/, 1), yi = find(/year|manufact/, 2);
+  const seen = new Set(fleet.map(t => plateKey(t.plate)));
+  bulkRows = table.slice(1).map((r, n) => {
+    const plate = normPlate(r[ci]), model = String(r[mi] ?? '').trim(), yr = String(r[yi] ?? '').trim();
+    const year = yr ? parseInt(yr, 10) : '';
+    let status = 'new', note = '';
+    if (!plate) { status = 'invalid'; note = 'Missing truck number'; }
+    else if (yr && !(year >= 1950 && year <= new Date().getFullYear() + 1)) { status = 'invalid'; note = 'Invalid year'; }
+    else if (seen.has(plateKey(plate))) { status = 'dup'; note = 'Already on register'; }
+    if (status === 'new') seen.add(plateKey(plate));
+    return {line: n + 2, plate, model, year, status, note};
+  });
+  const cnt = k => bulkRows.filter(r => r.status === k).length, nNew = cnt('new');
+  const cls = {new: 'text-emerald-700', dup: 'text-slate-400 line-through', invalid: 'text-rose-600'};
+  $('bulk-preview').innerHTML = `<p class="text-sm font-semibold mb-2"><span class="text-emerald-600">${nNew} new</span> · <span class="text-slate-500">${cnt('dup')} duplicates removed</span> · <span class="text-rose-600">${cnt('invalid')} invalid</span></p>
+    <div class="max-h-56 overflow-y-auto custom-scrollbar border rounded-xl"><table class="w-full text-xs"><tbody class="divide-y">${bulkRows.map(r => `<tr class="${cls[r.status]}"><td class="p-2 w-10">${r.line}</td><td class="p-2 font-mono">${esc(r.plate || '—')}</td><td class="p-2">${esc(r.model)}</td><td class="p-2">${esc(r.year)}</td><td class="p-2 text-right">${esc(r.note)}</td></tr>`).join('')}</tbody></table></div>`;
+  $('bulk-import').disabled = !nNew;
+}
+function importBulk() {
+  const add = bulkRows.filter(r => r.status === 'new');
+  add.forEach(r => fleet.push({plate: r.plate, model: r.model, year: r.year}));
+  saveFleet(); refreshFleetUI(); renderDashboard(); closeBulk();
+  showNotification(add.length + ' truck' + (add.length === 1 ? '' : 's') + ' added');
+}
+
+function showNotification(m) {
+  const t = document.createElement('div');
+  t.className = 'fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl z-50 text-sm';
+  t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 3000);
+}
+</script>
+</body>
+</html>
