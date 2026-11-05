@@ -74,7 +74,7 @@
         
         <!-- KPI Cards Grid -->
         <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+            <div role="button" tabindex="0" title="Click to view details" onclick="openKpi('total')" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between cursor-pointer hover:shadow-md hover:border-indigo-300 transition">
                 <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase tracking-wider">
                     <span>Fleet Vehicles</span>
                     <i class="fa-solid fa-truck text-indigo-600 bg-indigo-50 p-2 rounded-lg"></i>
@@ -85,7 +85,7 @@
                 </div>
             </div>
 
-            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+            <div role="button" tabindex="0" title="Click to view details" onclick="openKpi('valid')" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between cursor-pointer hover:shadow-md hover:border-indigo-300 transition">
                 <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase tracking-wider">
                     <span>Valid Active</span>
                     <i class="fa-solid fa-shield-check text-emerald-600 bg-emerald-50 p-2 rounded-lg"></i>
@@ -96,7 +96,7 @@
                 </div>
             </div>
 
-            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+            <div role="button" tabindex="0" title="Click to view details" onclick="openKpi('expiring')" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between cursor-pointer hover:shadow-md hover:border-indigo-300 transition">
                 <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase tracking-wider">
                     <span>Expiring Soon</span>
                     <i class="fa-solid fa-triangle-exclamation text-amber-600 bg-amber-50 p-2 rounded-lg"></i>
@@ -107,7 +107,7 @@
                 </div>
             </div>
 
-            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+            <div role="button" tabindex="0" title="Click to view details" onclick="openKpi('expired')" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between cursor-pointer hover:shadow-md hover:border-indigo-300 transition">
                 <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase tracking-wider">
                     <span>Expired</span>
                     <i class="fa-solid fa-circle-xmark text-rose-600 bg-rose-50 p-2 rounded-lg"></i>
@@ -118,7 +118,7 @@
                 </div>
             </div>
 
-            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between col-span-2 md:col-span-1">
+            <div role="button" tabindex="0" title="Click to view details" onclick="openKpi('files')" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between cursor-pointer hover:shadow-md hover:border-indigo-300 transition col-span-2 md:col-span-1">
                 <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase tracking-wider">
                     <span>Scanned Files</span>
                     <i class="fa-solid fa-file-shield text-blue-600 bg-blue-50 p-2 rounded-lg"></i>
@@ -132,6 +132,9 @@
 
         <!-- Expiry alerts: always shown, ignores all filters -->
         <div id="alerts-panel"></div>
+
+        <!-- Insurance watch: early / soon-to-expire insurance at a glance -->
+        <div id="insurance-panel"></div>
 
         <!-- Analytics by category -->
         <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
@@ -251,12 +254,24 @@
 <div class="px-6 py-4 bg-rose-600 text-white flex items-center justify-between"><h3 class="font-bold"><i class="fa-solid fa-bell mr-2"></i>Expiry Alerts</h3>
 <button onclick="$('alert-modal').classList.add('hidden')" class="text-rose-100 hover:text-white p-2"><i class="fa-solid fa-xmark text-lg"></i></button></div>
 <div id="alert-modal-list" class="p-5 overflow-y-auto custom-scrollbar space-y-2"></div></div></div>
-<div id="viewer-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+<div id="viewer-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[58] flex items-center justify-center p-4 hidden">
 <div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[88vh]">
 <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between"><h3 id="viewer-title" class="font-bold"></h3>
 <button onclick="closeViewer()" class="text-slate-400 hover:text-white p-2"><i class="fa-solid fa-xmark text-lg"></i></button></div>
 <div id="viewer-content" class="p-6 flex-1 overflow-y-auto bg-slate-100 space-y-4"></div>
 <div id="viewer-meta" class="px-6 py-3 border-t text-xs text-slate-500"></div></div></div>
+
+<div id="list-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[45] flex items-center justify-center p-4 hidden">
+<div class="bg-white rounded-3xl shadow-2xl max-w-3xl w-full overflow-hidden flex flex-col max-h-[88vh]">
+<div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between"><div><h3 id="list-title" class="font-bold text-lg"></h3><p id="list-sub" class="text-xs text-slate-400"></p></div>
+<button onclick="closeList()" class="text-slate-400 hover:text-white p-2"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+<div id="list-body" class="p-5 overflow-y-auto custom-scrollbar space-y-2 bg-slate-50"></div></div></div>
+<div id="detail-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[55] flex items-center justify-center p-4 hidden">
+<div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+<div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between"><h3 id="detail-title" class="font-bold text-lg"></h3>
+<button onclick="closeDetail()" class="text-slate-400 hover:text-white p-2"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+<div id="detail-body" class="p-6 overflow-y-auto custom-scrollbar space-y-5"></div>
+<div id="detail-actions" class="px-6 py-3 border-t border-slate-100 flex flex-wrap justify-end gap-2 bg-slate-50"></div></div></div>
 
 <script>
 const DEFAULT_FLEET = ["GN 5199-26", "GN 6199-26", "GN 7199-26", "GM 7199-25", "GN 5199-24", "GN 6199-24", "GN 7199-24", "GN 9199-24", "GT 8199-24", "GT 9199-24", "GN 5199-23", "GN 6199-23", "GN 8199-23", "GN 9199-23", "GT 6199-23", "GT 7199-23", "GT 9199-23", "GN 3199-22", "GN 4199-22", "GN 5199-22", "GN 6199-22", "GN 7199-22", "GN 8199-22", "GN 9199-22", "GC 9199-22", "GN 7199-20", "GN 8199-20", "GT 5199-18", "GT 6199-18", "GT 7199-18", "GT 8199-18", "GT 9199-18", "GT 5199-15", "GT 6199-15", "OK 6199-24", "OK 8199-24", "OK 9199-24", "OK 5199-25", "OK 6199-25", "OK 7199-25", "OK 8199-25", "OK 9199-25", "OK 7199-26", "GN 2642-13", "GN 2644-13", "GN 2643-13", "GN 2645-13", "GN 2646-13", "GE 7199-12", "GT 5199-12", "GT 7199-12", "GT 7199-Z", "GN 3331-18", "GN 4740-19", "GN 3572-21", "GT 7974-21", "GT 6305-22", "GN 1510-23", "GT 4920-23", "GT 8826-21", "BA 2888-23", "GT 7724-26", "GT 7725-26"];
@@ -462,8 +477,8 @@ function getStatus(d) {
 }
 const BADGE = {VALID:['Valid','bg-emerald-50 text-emerald-700 border-emerald-200'], EXPIRING:['Expiring Soon','bg-amber-50 text-amber-700 border-amber-200'], EXPIRED:['Expired','bg-rose-50 text-rose-700 border-rose-200']};
 const badge = r => { const [t, c] = BADGE[getStatus(r.expiryDate)]; return `<span class="px-3 py-1 rounded-full text-xs font-semibold border ${c}">${t}</span>`; };
-const fileBtn = r => (r.files && r.files.length) ? `<button onclick="openViewer('${r.id}')" class="text-indigo-600 text-xs font-semibold bg-indigo-50 px-2.5 py-1 rounded-lg"><i class="fa-solid fa-paperclip"></i> ${r.files.length} scan${r.files.length > 1 ? 's' : ''}</button>` : '<span class="text-xs text-slate-400 italic">No file</span>';
-const actions = r => `<button onclick="openEditModal('${r.id}')" class="p-2 text-slate-400 hover:text-indigo-600" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button><button onclick="deleteRecord('${r.id}')" class="p-2 text-slate-400 hover:text-rose-600" title="Delete"><i class="fa-solid fa-trash"></i></button>`;
+const fileBtn = r => (r.files && r.files.length) ? `<button onclick="event.stopPropagation();openViewer('${r.id}')" class="text-indigo-600 text-xs font-semibold bg-indigo-50 px-2.5 py-1 rounded-lg"><i class="fa-solid fa-paperclip"></i> ${r.files.length} scan${r.files.length > 1 ? 's' : ''}</button>` : '<span class="text-xs text-slate-400 italic">No file</span>';
+const actions = r => `<button onclick="event.stopPropagation();openEditModal('${r.id}')" class="p-2 text-slate-400 hover:text-indigo-600" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button><button onclick="event.stopPropagation();deleteRecord('${r.id}')" class="p-2 text-slate-400 hover:text-rose-600" title="Delete"><i class="fa-solid fa-trash"></i></button>`;
 
 function renderDashboard() {
   const c = {VALID:0, EXPIRING:0, EXPIRED:0};
@@ -471,26 +486,45 @@ function renderDashboard() {
   $('kpi-total').textContent = fleet.length;
   $('kpi-valid').textContent = c.VALID; $('kpi-expiring').textContent = c.EXPIRING; $('kpi-expired').textContent = c.EXPIRED;
   $('kpi-attachments').textContent = records.reduce((n, r) => n + (r.files || []).length, 0);
-  renderAlerts(); renderAnalytics();
-  filterRecords();
+  renderAlerts(); renderInsurance(); renderAnalytics();
+  filterRecords(); refreshOpenModals();
 }
 
 function filterRecords() {
-  const q = $('search-input').value.toLowerCase(), st = $('status-filter').value, ct = $('category-filter').value, vh = $('vehicle-filter').value;
+  const q = $('search-input').value.toLowerCase().trim(), qk = plateKey(q), st = $('status-filter').value, ct = $('category-filter').value, vh = $('vehicle-filter').value;
   const ix = p => { const k = plates().findIndex(x => plateKey(x) === plateKey(p)); return k < 0 ? 999 : k; };
   const data = records.filter(r =>
-    [r.plate, r.category, r.remarks, r.details, r.queueNo, r.chequeNo, r.bank].join(' ').toLowerCase().includes(q) &&
+    ([r.plate, r.category, r.remarks, r.details, r.queueNo, r.chequeNo, r.bank].join(' ').toLowerCase().includes(q) || (qk && plateKey(r.plate).includes(qk))) &&
     (st === 'ALL' || getStatus(r.expiryDate) === st) && (ct === 'ALL' || r.category === ct) && (vh === 'ALL' || r.plate === vh)
   ).sort((a, b) => ix(a.plate) - ix(b.plate) || b.issueDate.localeCompare(a.issueDate));
   const box = $('records-container');
   if (!data.length) { box.innerHTML = `<div class="p-12 text-center text-slate-400"><i class="fa-solid fa-folder-open text-4xl mb-3"></i><p class="text-sm font-medium">${records.length ? 'No records match your filters.' : 'No records yet. Click “Add Record” to start the register.'}</p></div>`; return; }
-  box.innerHTML = currentView === 'table' ? tableHtml(data) : gridHtml(data);
+  const byTruck = vh !== 'ALL' || (qk && data.some(r => plateKey(r.plate).includes(qk)));
+  box.innerHTML = byTruck ? groupedHtml(data) : (currentView === 'table' ? tableHtml(data) : gridHtml(data));
+}
+
+// Search by vehicle: every entry on a truck is listed under one truck header
+function groupedHtml(data) {
+  const groups = new Map();
+  data.forEach(r => { const k = plateKey(r.plate); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
+  const chip = (n, label, c) => n ? `<span class="px-2 py-0.5 rounded-full text-xs font-semibold border ${c}">${n} ${label}</span>` : '';
+  return '<div class="p-4 space-y-5">' + [...groups.entries()].map(([k, items]) => {
+    const all = records.filter(x => plateKey(x.plate) === k), c = {VALID: 0, EXPIRING: 0, EXPIRED: 0};
+    all.forEach(x => c[getStatus(x.expiryDate)]++);
+    const shown = items.length === all.length ? '' : ` <span class="text-slate-500 font-normal">(${items.length} shown with current filters)</span>`;
+    return `<section class="rounded-2xl border border-indigo-200 overflow-hidden">
+      <div class="bg-indigo-50 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-3"><i class="fa-solid fa-truck text-indigo-600"></i><div><span class="font-mono font-bold text-lg text-slate-900">${esc(items[0].plate)}</span>${truckInfo(items[0].plate)}</div></div>
+        <div class="flex flex-wrap items-center gap-2 text-xs"><span class="font-semibold text-slate-700">${all.length} entr${all.length === 1 ? 'y' : 'ies'} on this truck${shown}</span>
+          ${chip(c.VALID, 'valid', BADGE.VALID[1])}${chip(c.EXPIRING, 'expiring', BADGE.EXPIRING[1])}${chip(c.EXPIRED, 'expired', BADGE.EXPIRED[1])}</div></div>
+      ${currentView === 'table' ? tableHtml(items) : gridHtml(items)}</section>`;
+  }).join('') + '</div>';
 }
 
 function tableHtml(data) {
   const th = t => `<th class="p-3">${t}</th>`;
   return `<div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead><tr class="bg-slate-50 border-b text-xs font-bold text-slate-500 uppercase tracking-wider">${['No.','Vehicle No.','Category / Details','Date · Queue No.','Premium Due','1st Payment','2nd Payment · Date','Expiry · Status','Scans',''].map(th).join('')}</tr></thead><tbody class="divide-y divide-slate-100">` +
-  data.map((r, n) => `<tr class="hover:bg-slate-50/80 align-top">
+  data.map((r, n) => `<tr onclick="openDetail('${r.id}')" title="Click to view details" class="hover:bg-indigo-50/60 align-top cursor-pointer">
     <td class="p-3 text-xs text-slate-400">${n + 1}</td>
     <td class="p-3 font-bold font-mono text-slate-900 whitespace-nowrap">${esc(r.plate)}${truckInfo(r.plate)}</td>
     <td class="p-3"><span class="font-medium">${esc(r.category)}</span><p class="text-xs text-slate-400 max-w-[14rem] truncate">${esc(r.details || r.remarks || '')}</p>${r.chequeNo ? `<p class="text-xs text-slate-500 font-mono">Chq ${esc(r.chequeNo)} ${esc(r.bank)}</p>` : ''}</td>
@@ -506,7 +540,7 @@ function tableHtml(data) {
 function gridHtml(data) {
   const row = (a, b) => `<div class="flex justify-between"><span class="font-semibold text-slate-500">${a}</span><span class="font-mono text-slate-900">${b}</span></div>`;
   return '<div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">' + data.map(r => `
-    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+    <div onclick="openDetail('${r.id}')" title="Click to view details" class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3 cursor-pointer hover:border-indigo-300 hover:shadow-md transition">
       <div class="flex items-start justify-between"><div><span class="text-xs text-slate-400">${esc(r.category)} · ${esc(r.queueNo || 'no queue no.')}</span><h3 class="text-lg font-bold font-mono">${esc(r.plate)}</h3>${truckInfo(r.plate)}</div>${badge(r)}</div>
       <div class="space-y-1.5 text-xs bg-slate-50 p-3 rounded-xl">${row('Date', esc(r.issueDate))}${row('Expires', esc(r.expiryDate))}${row('Premium Due', money(r.cost))}${row('1st Payment', money(r.pay1))}${row('2nd Payment', money(r.pay2))}${r.chequeNo ? row('Cheque', esc(r.chequeNo) + ' ' + esc(r.bank)) : ''}</div>
       <p class="text-xs text-slate-500 italic line-clamp-2">${esc(r.details || r.remarks || '')}</p>
@@ -638,7 +672,7 @@ function alertListHtml(items) {
   return items.map(({r, d, s}) => {
     const c = s === 'EXPIRED' ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-amber-50 border-amber-200 text-amber-700';
     const t = d < 0 ? `Expired ${-d} day${-d > 1 ? 's' : ''} ago` : d === 0 ? 'Expires today' : `Expires in ${d} day${d > 1 ? 's' : ''}`;
-    return `<div class="flex items-center justify-between gap-3 px-3 py-2 rounded-xl border ${c}"><div class="min-w-0"><span class="font-mono font-bold text-sm">${esc(r.plate)}</span> <span class="text-xs">· ${esc(r.category)}</span></div><span class="text-xs font-semibold whitespace-nowrap">${t} (${esc(r.expiryDate)})</span></div>`;
+    return `<div onclick="openDetail('${r.id}')" class="cursor-pointer hover:shadow-sm flex items-center justify-between gap-3 px-3 py-2 rounded-xl border ${c}"><div class="min-w-0"><span class="font-mono font-bold text-sm">${esc(r.plate)}</span> <span class="text-xs">· ${esc(r.category)}</span></div><span class="text-xs font-semibold whitespace-nowrap">${t} (${esc(r.expiryDate)})</span></div>`;
   }).join('');
 }
 function renderAlerts() {
@@ -717,6 +751,145 @@ function importBulk() {
   add.forEach(r => fleet.push({plate: r.plate, model: r.model, year: r.year}));
   saveFleet(); refreshFleetUI(); renderDashboard(); closeBulk();
   showNotification(add.length + ' truck' + (add.length === 1 ? '' : 's') + ' added');
+}
+
+// =====================================================================
+// RECORD DETAILS, KPI DRILL-DOWN, INSURANCE WATCH  (UI only - no backend changes)
+// =====================================================================
+const INS_EARLY_DAYS = 90;   // insurance is flagged "early notice" this many days before expiry
+let detailId = null, listBuilder = null;
+const dueText = d => d < 0 ? `Expired ${-d} day${-d > 1 ? 's' : ''} ago` : d === 0 ? 'Expires today' : `Expires in ${d} day${d > 1 ? 's' : ''}`;
+const sameTruck = p => records.filter(x => plateKey(x.plate) === plateKey(p));
+
+function recRow(r, extra = '') {
+  const d = daysLeft(r.expiryDate);
+  return `<div onclick="openDetail('${r.id}')" class="cursor-pointer flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-indigo-50 hover:border-indigo-300 transition">
+    <div class="min-w-0"><span class="font-mono font-bold text-sm">${esc(r.plate)}</span> <span class="text-xs text-slate-500">· ${esc(r.category)}</span>${extra}<p class="text-xs text-slate-400 truncate">${esc(r.details || r.remarks || '')}</p></div>
+    <div class="text-right shrink-0">${badge(r)}<p class="text-xs text-slate-500 mt-1">${dueText(d)} · ${esc(r.expiryDate)}</p></div></div>`;
+}
+
+// ---- list modal (used by dashboard widgets) ----
+function showList(builder) { listBuilder = builder; renderList(); $('list-modal').classList.remove('hidden'); }
+function renderList() {
+  if (!listBuilder) return;
+  const b = listBuilder();
+  $('list-title').textContent = b.title; $('list-sub').textContent = b.sub || '';
+  $('list-body').innerHTML = b.html || '<p class="text-sm text-slate-400 text-center py-8">Nothing to show.</p>';
+}
+const closeList = () => { $('list-modal').classList.add('hidden'); listBuilder = null; };
+
+function openKpi(kind) {
+  const byExpiry = (a, b) => daysLeft(a.expiryDate) - daysLeft(b.expiryDate);
+  showList(() => {
+    if (kind === 'total') {
+      const rows = fleet.map(t => {
+        const rs = sameTruck(t.plate), c = {EXPIRED: 0, EXPIRING: 0};
+        rs.forEach(r => { const s = getStatus(r.expiryDate); if (c[s] !== undefined) c[s]++; });
+        return `<button data-p="${esc(t.plate)}" onclick="viewTruck(this.dataset.p)" class="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-indigo-50 hover:border-indigo-300 transition">
+          <div><span class="font-mono font-bold text-sm">${esc(t.plate)}</span>${truckInfo(t.plate)}</div>
+          <div class="text-xs text-right"><span class="text-slate-500">${rs.length} record${rs.length === 1 ? '' : 's'}</span>${c.EXPIRED ? ` · <span class="text-rose-600 font-semibold">${c.EXPIRED} expired</span>` : ''}${c.EXPIRING ? ` · <span class="text-amber-600 font-semibold">${c.EXPIRING} expiring</span>` : ''}</div></button>`;
+      }).join('');
+      return {title: 'Fleet Vehicles', sub: `${fleet.length} vehicles on the register · click a vehicle to see all its records`, html: rows};
+    }
+    if (kind === 'files') {
+      const rs = records.filter(r => (r.files || []).length).sort(byExpiry);
+      return {title: 'Scanned Files', sub: `${rs.length} records with scans · click a record for details`, html: rs.map(r => recRow(r, ` <span class="text-xs text-blue-600"><i class="fa-solid fa-paperclip"></i> ${r.files.length}</span>`)).join('')};
+    }
+    const S = kind.toUpperCase(), rs = records.filter(r => getStatus(r.expiryDate) === S).sort(byExpiry);
+    const name = {VALID: 'Valid Active', EXPIRING: 'Expiring Soon (within 30 days)', EXPIRED: 'Expired'}[S];
+    return {title: name, sub: `${rs.length} record${rs.length === 1 ? '' : 's'} · click a record for details`, html: rs.map(r => recRow(r)).join('')};
+  });
+}
+
+// Jump to the register showing every entry for one truck
+function viewTruck(p) {
+  closeList(); closeDetail(); $('alert-modal').classList.add('hidden');
+  $('status-filter').value = 'ALL'; $('category-filter').value = 'ALL'; $('vehicle-filter').value = 'ALL';
+  $('search-input').value = p; filterRecords();
+  $('records-container').scrollIntoView({behavior: 'smooth'});
+}
+
+// ---- record detail modal ----
+function openDetail(id) { detailId = id; renderDetail(); $('detail-modal').classList.remove('hidden'); }
+const closeDetail = () => { $('detail-modal').classList.add('hidden'); detailId = null; };
+function renderDetail() {
+  const r = records.find(x => x.id === detailId);
+  if (!r) { if (!$('detail-modal').classList.contains('hidden')) closeDetail(); return; }
+  const d = daysLeft(r.expiryDate), chq = r.category === 'Scanned Cheque', t = truckOf(r.plate);
+  const f = (l, v, mono) => `<div class="bg-slate-50 rounded-xl px-3 py-2"><p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">${l}</p><p class="text-sm text-slate-900 ${mono ? 'font-mono' : ''} break-words">${v || '<span class="text-slate-300">—</span>'}</p></div>`;
+  const paid = (Number(r.pay1) || 0) + (Number(r.pay2) || 0), bal = (Number(r.cost) || 0) - paid;
+  const others = sameTruck(r.plate).filter(x => x.id !== r.id).sort((a, b) => (b.issueDate || '').localeCompare(a.issueDate || ''));
+  $('detail-title').textContent = r.category + ' · ' + r.plate;
+  $('detail-body').innerHTML = `
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div><p class="font-mono font-bold text-xl text-slate-900">${esc(r.plate)}</p>${t && (t.model || t.year) ? `<p class="text-xs text-slate-400">${esc([t.model, t.year].filter(Boolean).join(' · '))}</p>` : ''}</div>
+      <div class="text-right">${badge(r)}<p class="text-xs text-slate-500 mt-1">${dueText(d)}</p></div></div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      ${f('Category', esc(r.category))}${f('Queue No.', esc(r.queueNo), true)}${f('Date', esc(r.issueDate))}
+      ${f('Expiry Date', esc(r.expiryDate))}${f(chq ? 'Cheque Amount' : 'Premium Due', r.cost ? money(r.cost) : '', true)}${f('Outstanding', r.cost ? money(Math.max(bal, 0)) : '', true)}
+      ${f('First Payment', r.pay1 ? money(r.pay1) : '', true)}${f('Second Payment', r.pay2 ? money(r.pay2) : '', true)}${f('Payment Date', esc(r.payDate))}
+      ${f('Cheque No.', esc(r.chequeNo), true)}${f('Bank', esc(r.bank))}${f('Scans', (r.files || []).length ? (r.files || []).length + ' attached' : '')}</div>
+    ${f('Details', esc(r.details))}${f('Remarks', esc(r.remarks))}
+    ${(r.files || []).length ? `<div><p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Attached files</p><div class="space-y-1">${r.files.map(x => `<p class="text-xs text-slate-600"><i class="fa-solid ${String(x.name).toLowerCase().endsWith('.pdf') ? 'fa-file-pdf' : 'fa-image'} text-indigo-500 mr-1"></i>${esc(x.kind)} · ${esc(x.name)}</p>`).join('')}</div></div>` : ''}
+    <div><p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Other records on ${esc(r.plate)} (${others.length})</p>
+      <div class="space-y-2">${others.length ? others.map(x => recRow(x)).join('') : '<p class="text-xs text-slate-400 italic">No other records on this truck.</p>'}</div></div>`;
+  const btn = (c, ic, t, fn) => `<button onclick="${fn}" class="px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 ${c}"><i class="fa-solid ${ic} text-xs"></i>${t}</button>`;
+  $('detail-actions').innerHTML =
+    ((r.files || []).length ? btn('bg-blue-50 text-blue-700 hover:bg-blue-100', 'fa-paperclip', 'View scans', `openViewer('${r.id}')`) : '') +
+    btn('bg-slate-100 text-slate-700 hover:bg-slate-200', 'fa-truck', 'All records on this truck', `viewTruck('${esc(r.plate).replace(/'/g, "\\'")}')`) +
+    btn('bg-indigo-600 text-white hover:bg-indigo-500', 'fa-pen-to-square', 'Edit', `closeDetail();openEditModal('${r.id}')`) +
+    btn('bg-rose-50 text-rose-600 hover:bg-rose-100', 'fa-trash', 'Delete', `deleteRecord('${r.id}')`);
+}
+function refreshOpenModals() {
+  if (!$('list-modal').classList.contains('hidden')) renderList();
+  if (!$('detail-modal').classList.contains('hidden')) renderDetail();
+}
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (!$('viewer-modal').classList.contains('hidden')) closeViewer();
+  else if (!$('detail-modal').classList.contains('hidden')) closeDetail();
+  else if (!$('list-modal').classList.contains('hidden')) closeList();
+  else if (!$('alert-modal').classList.contains('hidden')) $('alert-modal').classList.add('hidden');
+});
+
+// ---- insurance watch (dashboard) ----
+function insuranceWatch() {
+  const ins = records.filter(r => r.category === 'Insurance');
+  const latest = {};
+  ins.forEach(r => { const k = plateKey(r.plate); if (!latest[k] || r.expiryDate > latest[k]) latest[k] = r.expiryDate; });
+  const items = ins.map(r => {
+    const d = daysLeft(r.expiryDate);
+    return {r, d, grp: d < 0 ? 'expired' : d <= 30 ? 'soon' : d <= INS_EARLY_DAYS ? 'early' : 'ok', newer: r.expiryDate < latest[plateKey(r.plate)] ? latest[plateKey(r.plate)] : ''};
+  });
+  return {total: ins.length, items, watch: items.filter(x => x.grp !== 'ok').sort((a, b) => a.d - b.d)};
+}
+const INS_STYLE = {expired: 'bg-rose-50 border-rose-200 text-rose-700', soon: 'bg-amber-50 border-amber-200 text-amber-700', early: 'bg-sky-50 border-sky-200 text-sky-700'};
+function insRow({r, d, grp, newer}) {
+  const tag = newer ? `<span class="block text-[11px] text-slate-500 font-normal">Newer policy on file for this truck (expires ${esc(newer)})</span>` : '';
+  return `<div onclick="openDetail('${r.id}')" class="cursor-pointer hover:shadow-sm flex items-center justify-between gap-3 px-3 py-2 rounded-xl border ${INS_STYLE[grp]}">
+    <div class="min-w-0"><span class="font-mono font-bold text-sm">${esc(r.plate)}</span> <span class="text-xs">· ${esc(r.details || 'Insurance')}</span>${tag}</div>
+    <span class="text-xs font-semibold whitespace-nowrap text-right">${dueText(d)}<span class="block font-normal">${esc(r.expiryDate)}</span></span></div>`;
+}
+function renderInsurance() {
+  const box = $('insurance-panel'), w = insuranceWatch();
+  const n = g => w.items.filter(x => x.grp === g).length;
+  const widget = (g, label, sub, c) => `<button onclick="openInsurance('${g}')" class="text-left rounded-xl border px-3 py-2 hover:shadow-md transition ${c}"><p class="text-[11px] font-bold uppercase tracking-wider">${label}</p><p class="text-2xl font-bold">${n(g)}</p><p class="text-[11px] opacity-80">${sub}</p></button>`;
+  const list = w.watch.length ? w.watch.map(insRow).join('') : `<p class="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-3"><i class="fa-solid fa-circle-check mr-1"></i>${w.total ? `No insurance expires within ${INS_EARLY_DAYS} days.` : 'No insurance records on the register yet.'}</p>`;
+  box.innerHTML = `<div class="bg-white rounded-2xl shadow-sm border border-sky-200 p-4">
+    <div class="flex flex-wrap items-center gap-2 mb-3"><i class="fa-solid fa-car-burst text-sky-600"></i><h2 class="font-bold text-slate-900">Insurance Watch</h2><span class="text-xs text-slate-500">expired and expiring within ${INS_EARLY_DAYS} days · click a widget or a row for details</span></div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+      ${widget('expired', 'Expired', 'Needs renewal', 'bg-rose-50 border-rose-200 text-rose-700')}
+      ${widget('soon', 'Expiring Soon', 'Within 30 days', 'bg-amber-50 border-amber-200 text-amber-700')}
+      ${widget('early', 'Early Notice', `31 – ${INS_EARLY_DAYS} days`, 'bg-sky-50 border-sky-200 text-sky-700')}
+      ${widget('all', 'All Flagged', 'Expired + upcoming', 'bg-slate-50 border-slate-200 text-slate-700').replace(`>${n('all')}<`, `>${w.watch.length}<`)}</div>
+    <div class="space-y-2 max-h-72 overflow-y-auto custom-scrollbar">${list}</div></div>`;
+}
+function openInsurance(g) {
+  showList(() => {
+    const w = insuranceWatch(), rows = g === 'all' ? w.watch : w.items.filter(x => x.grp === g).sort((a, b) => a.d - b.d);
+    const name = {expired: 'Insurance · Expired', soon: 'Insurance · Expiring within 30 days', early: `Insurance · Early notice (31–${INS_EARLY_DAYS} days)`, all: 'Insurance · All flagged'}[g];
+    return {title: name, sub: `${rows.length} polic${rows.length === 1 ? 'y' : 'ies'} · click one for full details`, html: rows.map(insRow).join('')};
+  });
 }
 
 function showNotification(m) {
