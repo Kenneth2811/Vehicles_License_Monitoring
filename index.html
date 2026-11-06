@@ -130,6 +130,22 @@
             </div>
         </div>
 
+        <!-- Expiry display settings + history shortcuts -->
+        <div id="expiry-controls" class="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div class="flex flex-wrap items-center gap-2">
+                <i class="fa-solid fa-eye-slash text-slate-400"></i>
+                <label for="vis-select" class="text-xs font-semibold text-slate-600">Hide expired, un-renewed records after</label>
+                <select id="vis-select" onchange="visChanged()" class="bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option>
+                    <option value="180">6 months</option><option value="365">1 year</option><option value="custom">Custom…</option><option value="never">Never hide</option>
+                </select>
+                <input id="vis-custom" type="number" min="1" max="3650" oninput="visChanged()" class="hidden w-20 bg-slate-50 border border-slate-200 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500" aria-label="Custom number of days">
+                <span id="vis-custom-lbl" class="hidden text-xs text-slate-500">days</span>
+            </div>
+            <div id="history-chips" class="flex flex-wrap items-center gap-2 md:ml-auto"></div>
+            <p id="vis-desc" class="basis-full text-[11px] text-slate-400"></p>
+        </div>
+
         <!-- Expiry alerts: always shown, ignores all filters -->
         <div id="alerts-panel"></div>
 
@@ -139,7 +155,7 @@
         <!-- Analytics by category -->
         <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
             <h2 class="font-bold text-slate-900 mb-1">Analytics by Category</h2>
-            <p class="text-xs text-slate-500 mb-4">Valid, expiring and expired records per document category. Click a category to filter the register.</p>
+            <p class="text-xs text-slate-500 mb-4">Current valid, expiring and expired records per document category (superseded and archived records are excluded). Click a category to filter the register.</p>
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div class="lg:col-span-2 relative h-72"><canvas id="cat-chart"></canvas></div>
                 <div id="cat-cards" class="space-y-2"></div>
@@ -159,10 +175,13 @@
                 <!-- Filters -->
                 <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
                     <select id="status-filter" onchange="filterRecords()" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                        <option value="ALL">All Statuses</option>
+                        <option value="ALL">All Records (full history)</option>
+                        <option value="CURRENT">Current only (hide history)</option>
                         <option value="VALID">Valid</option>
                         <option value="EXPIRING">Expiring Soon</option>
-                        <option value="EXPIRED">Expired</option>
+                        <option value="EXPIRED">Expired (needs renewal)</option>
+                        <option value="SUPERSEDED">Superseded (renewed)</option>
+                        <option value="ARCHIVED">Archived expired</option>
                     </select>
 
                     <select id="category-filter" onchange="filterRecords()" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -455,7 +474,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) refr
 
 async function startApp() {
   if (!await loadFromSheet()) return;
-  refreshFleetUI();
+  refreshFleetUI(); syncVisUI();
   $('doc-updated').textContent = 'Updated ' + new Date().toLocaleDateString('en-GB');
   renderDashboard();
   setTimeout(() => { const a = alertItems(); if (a.length) { $('alert-modal-list').innerHTML = alertListHtml(a); $('alert-modal').classList.remove('hidden'); } }, 400);
@@ -469,6 +488,93 @@ async function resetToDefaults() {
   records = []; saveRecords(); showNotification('Register cleared');
 }
 
+// =====================================================================
+// EXPIRY LIFECYCLE  (computed in the browser only - nothing extra is written to Google Sheets,
+// so the Sheet columns / Code.gs stay exactly as they are and no record is ever deleted)
+//   SUPERSEDED = a newer record (later expiry date) exists for the same truck + document type
+//   ARCHIVED   = expired, never replaced, and older than the "hide after" period
+// =====================================================================
+const VISKEY = 'okodat_expired_vis_v1';
+// How a newer record replaces an older one:
+//   'category' = same truck + same document type
+//   'details'  = same truck + type + same wording in "Details" (digits ignored, so a new policy no. still matches)
+//   null       = never superseded
+const SUPERSEDE_RULES = {'Insurance': 'category', 'Roadworthy': 'category', 'Fire Extinguisher': 'category', 'Permit': 'details', 'Driver License': 'details', 'Other': 'details', 'Scanned Cheque': null};
+let vis = loadVis(), lifeMap = new Map(), lifeSigStr = '';
+function loadVis() {
+  try { const v = JSON.parse(localStorage.getItem(VISKEY) || 'null');
+    if (v && ['30','60','90','180','365','custom','never'].includes(String(v.mode))) return {mode: String(v.mode), custom: Math.min(3650, Math.max(1, parseInt(v.custom, 10) || 120))}; } catch (e) {}
+  return {mode: '90', custom: 120};
+}
+const visDays = () => vis.mode === 'never' ? Infinity : vis.mode === 'custom' ? vis.custom : parseInt(vis.mode, 10);
+const dayKey = v => { const s = String(v ?? '').trim(), m = /^(\d{4}-\d{2}-\d{2})/.exec(s); if (m) return m[1]; const d = new Date(s); return isNaN(d) ? '' : d.toLocaleDateString('en-CA'); };
+const detailsKey = v => String(v ?? '').toLowerCase().replace(/[0-9]+/g, '').replace(/[^a-z]+/g, ' ').trim();
+function groupKey(r) {
+  const rule = r.category in SUPERSEDE_RULES ? SUPERSEDE_RULES[r.category] : 'details';
+  if (!rule || !dayKey(r.expiryDate)) return null;
+  return plateKey(r.plate) + '|' + r.category + (rule === 'details' ? '|' + detailsKey(r.details) : '');
+}
+const cmpRec = (a, b) => dayKey(a.expiryDate).localeCompare(dayKey(b.expiryDate)) || dayKey(a.issueDate).localeCompare(dayKey(b.issueDate)) || String(a.id).localeCompare(String(b.id));
+const lifeSig = () => records.length + '|' + new Date().toLocaleDateString('en-CA') + '|' + visDays();
+function buildLife() {
+  const best = new Map();                                   // latest record per truck + document type
+  records.forEach(r => { const k = groupKey(r); if (!k) return; const b = best.get(k); if (!b || cmpRec(r, b) > 0) best.set(k, r); });
+  const win = visDays(), m = new Map();
+  records.forEach(r => {
+    const k = groupKey(r), b = k && best.get(k), raw = getStatus(r.expiryDate), d = daysLeft(r.expiryDate);
+    const sup = !!(b && b.id !== r.id && dayKey(b.expiryDate) > dayKey(r.expiryDate));   // strictly later expiry = renewed
+    const arch = !sup && raw === 'EXPIRED' && -d > win;
+    m.set(r.id, {raw, sup, arch, by: sup ? b : null, cur: !sup && !arch, state: sup ? 'SUPERSEDED' : arch ? 'ARCHIVED' : raw});
+  });
+  lifeMap = m; lifeSigStr = lifeSig();
+}
+function life(r) {
+  if (lifeSigStr !== lifeSig()) buildLife();
+  return lifeMap.get(r.id) || {raw: getStatus(r.expiryDate), sup: false, arch: false, cur: true, by: null, state: getStatus(r.expiryDate)};
+}
+function matchStatus(r, st) {
+  const L = life(r);
+  if (st === 'ALL') return true;
+  if (st === 'CURRENT') return L.cur;
+  if (st === 'SUPERSEDED') return L.sup;
+  if (st === 'ARCHIVED') return L.arch;
+  return L.cur && L.raw === st;
+}
+function syncVisUI() {
+  $('vis-select').value = vis.mode;
+  const c = vis.mode === 'custom';
+  $('vis-custom').classList.toggle('hidden', !c); $('vis-custom-lbl').classList.toggle('hidden', !c);
+  if (c && document.activeElement !== $('vis-custom')) $('vis-custom').value = vis.custom;
+  const w = visDays();
+  $('vis-desc').textContent = (w === Infinity ? 'Expired documents with no replacement always stay flagged.' : `Expired documents with no replacement stay flagged for ${w} day${w === 1 ? '' : 's'}, then move to history.`) +
+    ' Renewed documents are marked superseded automatically. Nothing is deleted - open history any time. (This setting is saved in this browser.)';
+}
+function visChanged() {
+  vis.mode = $('vis-select').value;
+  if (vis.mode === 'custom') { const n = parseInt($('vis-custom').value, 10); if (n >= 1) vis.custom = Math.min(n, 3650); }
+  try { localStorage.setItem(VISKEY, JSON.stringify(vis)); } catch (e) {}
+  syncVisUI(); renderDashboard();
+}
+function renderHistoryChips() {
+  let s = 0, a = 0;
+  records.forEach(r => { const L = life(r); if (L.sup) s++; else if (L.arch) a++; });
+  const chip = (k, label, n, ic) => `<button onclick="openHistory('${k}')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-50 hover:bg-indigo-50 text-slate-700 border border-slate-200 transition"><i class="fa-solid ${ic} text-slate-400 mr-1"></i>${label} <b class="ml-0.5">${n}</b></button>`;
+  $('history-chips').innerHTML = chip('SUPERSEDED', 'Superseded', s, 'fa-clock-rotate-left') + chip('ARCHIVED', 'Archived expired', a, 'fa-box-archive') + chip('ALL', 'Full history', s + a, 'fa-list');
+}
+function openHistory(kind) {
+  showList(() => {
+    const rs = records.filter(r => { const L = life(r); return kind === 'SUPERSEDED' ? L.sup : kind === 'ARCHIVED' ? L.arch : (L.sup || L.arch); })
+      .sort((a, b) => plateKey(a.plate).localeCompare(plateKey(b.plate)) || dayKey(b.expiryDate).localeCompare(dayKey(a.expiryDate)));
+    const title = {SUPERSEDED: 'History · Superseded (renewed)', ARCHIVED: 'History · Archived expired (no replacement)', ALL: 'History · Superseded + archived'}[kind];
+    return {title, sub: `${rs.length} record${rs.length === 1 ? '' : 's'} · kept for audit, never deleted · click one for details`,
+      html: rs.map(r => { const L = life(r); return recRow(r, L.sup ? ` <span class="text-[11px] text-slate-500">→ replaced by record expiring ${esc(L.by.expiryDate)}</span>` : ''); }).join('')};
+  });
+}
+function lifeNote(r, d) {
+  const L = life(r);
+  return L.sup ? `Replaced by a newer record expiring ${esc(L.by.expiryDate)}` : L.arch ? `${dueText(d)} · archived from alerts` : dueText(d);
+}
+
 function getStatus(d) {
   const t = new Date(); t.setHours(0,0,0,0);
   const e = new Date(d); e.setHours(0,0,0,0);
@@ -476,17 +582,19 @@ function getStatus(d) {
   return n < 0 ? 'EXPIRED' : n <= 30 ? 'EXPIRING' : 'VALID';
 }
 const BADGE = {VALID:['Valid','bg-emerald-50 text-emerald-700 border-emerald-200'], EXPIRING:['Expiring Soon','bg-amber-50 text-amber-700 border-amber-200'], EXPIRED:['Expired','bg-rose-50 text-rose-700 border-rose-200']};
-const badge = r => { const [t, c] = BADGE[getStatus(r.expiryDate)]; return `<span class="px-3 py-1 rounded-full text-xs font-semibold border ${c}">${t}</span>`; };
+const BADGE_X = {SUPERSEDED:['Superseded','bg-slate-100 text-slate-600 border-slate-300'], ARCHIVED:['Expired · Archived','bg-slate-100 text-rose-400 border-rose-200']};
+const badge = r => { const L = life(r), [t, c] = BADGE_X[L.state] || BADGE[L.state], tip = L.sup ? ` title="Replaced by a newer record expiring ${esc(L.by.expiryDate)}"` : L.arch ? ' title="Expired with no replacement - hidden from alerts after the configured period"' : ''; return `<span${tip} class="px-3 py-1 rounded-full text-xs font-semibold border ${c}">${t}</span>`; };
 const fileBtn = r => (r.files && r.files.length) ? `<button onclick="event.stopPropagation();openViewer('${r.id}')" class="text-indigo-600 text-xs font-semibold bg-indigo-50 px-2.5 py-1 rounded-lg"><i class="fa-solid fa-paperclip"></i> ${r.files.length} scan${r.files.length > 1 ? 's' : ''}</button>` : '<span class="text-xs text-slate-400 italic">No file</span>';
 const actions = r => `<button onclick="event.stopPropagation();openEditModal('${r.id}')" class="p-2 text-slate-400 hover:text-indigo-600" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button><button onclick="event.stopPropagation();deleteRecord('${r.id}')" class="p-2 text-slate-400 hover:text-rose-600" title="Delete"><i class="fa-solid fa-trash"></i></button>`;
 
 function renderDashboard() {
+  buildLife();
   const c = {VALID:0, EXPIRING:0, EXPIRED:0};
-  records.forEach(r => c[getStatus(r.expiryDate)]++);
+  records.forEach(r => { const L = life(r); if (L.cur) c[L.raw]++; });
   $('kpi-total').textContent = fleet.length;
   $('kpi-valid').textContent = c.VALID; $('kpi-expiring').textContent = c.EXPIRING; $('kpi-expired').textContent = c.EXPIRED;
   $('kpi-attachments').textContent = records.reduce((n, r) => n + (r.files || []).length, 0);
-  renderAlerts(); renderInsurance(); renderAnalytics();
+  renderAlerts(); renderInsurance(); renderAnalytics(); renderHistoryChips();
   filterRecords(); refreshOpenModals();
 }
 
@@ -495,7 +603,7 @@ function filterRecords() {
   const ix = p => { const k = plates().findIndex(x => plateKey(x) === plateKey(p)); return k < 0 ? 999 : k; };
   const data = records.filter(r =>
     ([r.plate, r.category, r.remarks, r.details, r.queueNo, r.chequeNo, r.bank].join(' ').toLowerCase().includes(q) || (qk && plateKey(r.plate).includes(qk))) &&
-    (st === 'ALL' || getStatus(r.expiryDate) === st) && (ct === 'ALL' || r.category === ct) && (vh === 'ALL' || r.plate === vh)
+    matchStatus(r, st) && (ct === 'ALL' || r.category === ct) && (vh === 'ALL' || r.plate === vh)
   ).sort((a, b) => ix(a.plate) - ix(b.plate) || b.issueDate.localeCompare(a.issueDate));
   const box = $('records-container');
   if (!data.length) { box.innerHTML = `<div class="p-12 text-center text-slate-400"><i class="fa-solid fa-folder-open text-4xl mb-3"></i><p class="text-sm font-medium">${records.length ? 'No records match your filters.' : 'No records yet. Click “Add Record” to start the register.'}</p></div>`; return; }
@@ -509,14 +617,14 @@ function groupedHtml(data) {
   data.forEach(r => { const k = plateKey(r.plate); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
   const chip = (n, label, c) => n ? `<span class="px-2 py-0.5 rounded-full text-xs font-semibold border ${c}">${n} ${label}</span>` : '';
   return '<div class="p-4 space-y-5">' + [...groups.entries()].map(([k, items]) => {
-    const all = records.filter(x => plateKey(x.plate) === k), c = {VALID: 0, EXPIRING: 0, EXPIRED: 0};
-    all.forEach(x => c[getStatus(x.expiryDate)]++);
+    const all = records.filter(x => plateKey(x.plate) === k), c = {VALID: 0, EXPIRING: 0, EXPIRED: 0, HISTORY: 0};
+    all.forEach(x => { const L = life(x); if (L.cur) c[L.raw]++; else c.HISTORY++; });
     const shown = items.length === all.length ? '' : ` <span class="text-slate-500 font-normal">(${items.length} shown with current filters)</span>`;
     return `<section class="rounded-2xl border border-indigo-200 overflow-hidden">
       <div class="bg-indigo-50 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
         <div class="flex items-center gap-3"><i class="fa-solid fa-truck text-indigo-600"></i><div><span class="font-mono font-bold text-lg text-slate-900">${esc(items[0].plate)}</span>${truckInfo(items[0].plate)}</div></div>
         <div class="flex flex-wrap items-center gap-2 text-xs"><span class="font-semibold text-slate-700">${all.length} entr${all.length === 1 ? 'y' : 'ies'} on this truck${shown}</span>
-          ${chip(c.VALID, 'valid', BADGE.VALID[1])}${chip(c.EXPIRING, 'expiring', BADGE.EXPIRING[1])}${chip(c.EXPIRED, 'expired', BADGE.EXPIRED[1])}</div></div>
+          ${chip(c.VALID, 'valid', BADGE.VALID[1])}${chip(c.EXPIRING, 'expiring', BADGE.EXPIRING[1])}${chip(c.EXPIRED, 'expired', BADGE.EXPIRED[1])}${chip(c.HISTORY, 'in history', 'bg-slate-100 text-slate-600 border-slate-300')}</div></div>
       ${currentView === 'table' ? tableHtml(items) : gridHtml(items)}</section>`;
   }).join('') + '</div>';
 }
@@ -524,7 +632,7 @@ function groupedHtml(data) {
 function tableHtml(data) {
   const th = t => `<th class="p-3">${t}</th>`;
   return `<div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead><tr class="bg-slate-50 border-b text-xs font-bold text-slate-500 uppercase tracking-wider">${['No.','Vehicle No.','Category / Details','Date · Queue No.','Premium Due','1st Payment','2nd Payment · Date','Expiry · Status','Scans',''].map(th).join('')}</tr></thead><tbody class="divide-y divide-slate-100">` +
-  data.map((r, n) => `<tr onclick="openDetail('${r.id}')" title="Click to view details" class="hover:bg-indigo-50/60 align-top cursor-pointer">
+  data.map((r, n) => `<tr onclick="openDetail('${r.id}')" title="Click to view details" class="hover:bg-indigo-50/60 align-top cursor-pointer ${life(r).cur ? '' : 'opacity-60'}">
     <td class="p-3 text-xs text-slate-400">${n + 1}</td>
     <td class="p-3 font-bold font-mono text-slate-900 whitespace-nowrap">${esc(r.plate)}${truckInfo(r.plate)}</td>
     <td class="p-3"><span class="font-medium">${esc(r.category)}</span><p class="text-xs text-slate-400 max-w-[14rem] truncate">${esc(r.details || r.remarks || '')}</p>${r.chequeNo ? `<p class="text-xs text-slate-500 font-mono">Chq ${esc(r.chequeNo)} ${esc(r.bank)}</p>` : ''}</td>
@@ -540,7 +648,7 @@ function tableHtml(data) {
 function gridHtml(data) {
   const row = (a, b) => `<div class="flex justify-between"><span class="font-semibold text-slate-500">${a}</span><span class="font-mono text-slate-900">${b}</span></div>`;
   return '<div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">' + data.map(r => `
-    <div onclick="openDetail('${r.id}')" title="Click to view details" class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3 cursor-pointer hover:border-indigo-300 hover:shadow-md transition">
+    <div onclick="openDetail('${r.id}')" title="Click to view details" class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3 cursor-pointer hover:border-indigo-300 hover:shadow-md transition${life(r).cur ? '' : ' opacity-60'}">
       <div class="flex items-start justify-between"><div><span class="text-xs text-slate-400">${esc(r.category)} · ${esc(r.queueNo || 'no queue no.')}</span><h3 class="text-lg font-bold font-mono">${esc(r.plate)}</h3>${truckInfo(r.plate)}</div>${badge(r)}</div>
       <div class="space-y-1.5 text-xs bg-slate-50 p-3 rounded-xl">${row('Date', esc(r.issueDate))}${row('Expires', esc(r.expiryDate))}${row('Premium Due', money(r.cost))}${row('1st Payment', money(r.pay1))}${row('2nd Payment', money(r.pay2))}${r.chequeNo ? row('Cheque', esc(r.chequeNo) + ' ' + esc(r.bank)) : ''}</div>
       <p class="text-xs text-slate-500 italic line-clamp-2">${esc(r.details || r.remarks || '')}</p>
@@ -612,9 +720,12 @@ async function handleFormSubmit(e) {
     queueNo: v('queue-no'), details: v('details'), cost: n('cost'), pay1: n('pay1'), pay2: n('pay2'), payDate: $('pay-date').value,
     chequeNo: v('cheque-no'), bank: v('bank'), remarks: v('remarks'), files: pending.map(({id, name, kind}) => ({id, name, kind}))};
   if (!truckOf(rec.plate)) { fleet.push({plate: rec.plate, model: '', year: ''}); saveFleet(); refreshFleetUI(); }
+  const wasSup = new Set(records.filter(r => life(r).sup).map(r => r.id));
   const i = records.findIndex(r => r.id === id);
   if (i >= 0) records[i] = rec; else records.unshift(rec);
-  saveRecords(); closeModal(); showNotification(i >= 0 ? 'Record updated' : 'Record added');
+  saveRecords(); closeModal();
+  const nowSup = records.filter(r => life(r).sup && !wasSup.has(r.id)).length;
+  showNotification((i >= 0 ? 'Record updated' : 'Record added') + (nowSup ? ` · ${nowSup} older record${nowSup > 1 ? 's' : ''} marked superseded` : ''));
 }
 async function deleteRecord(id) {
   if (!confirm('Delete this record and its scanned files?')) return;
@@ -644,7 +755,7 @@ const closeViewer = () => $('viewer-modal').classList.add('hidden');
 function exportToCSV() {
   const q = s => '"' + String(s ?? '').replace(/"/g, '""') + '"';
   const rows = [['NO.','VEHICLE NO.','DATE','QUEUE NO.','DETAILS','PREMIUM DUE','FIRST PAYMENT','SECOND PAYMENT','PAYMENT DATE','REMARKS','CATEGORY','EXPIRY DATE','STATUS','CHEQUE NO.','BANK','SCANS']];
-  records.forEach((r, i) => rows.push([i + 1, r.plate, r.issueDate, r.queueNo, r.details, r.cost, r.pay1, r.pay2, r.payDate, r.remarks, r.category, r.expiryDate, getStatus(r.expiryDate), r.chequeNo, r.bank, (r.files || []).length]));
+  records.forEach((r, i) => rows.push([i + 1, r.plate, r.issueDate, r.queueNo, r.details, r.cost, r.pay1, r.pay2, r.payDate, r.remarks, r.category, r.expiryDate, life(r).state, r.chequeNo, r.bank, (r.files || []).length]));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.map(r => r.map(q).join(',')).join('\n')], {type: 'text/csv'}));
   a.download = 'okodat_asset_register_' + new Date().toISOString().split('T')[0] + '.csv'; a.click();
@@ -666,7 +777,7 @@ function refreshFleetUI() {
 // ---------- Expiry alerts (all categories, ignores filters) ----------
 const daysLeft = d => { const t = new Date(); t.setHours(0,0,0,0); const e = new Date(d); e.setHours(0,0,0,0); return Math.ceil((e - t) / 864e5); };
 function alertItems() {
-  return records.map(r => ({r, d: daysLeft(r.expiryDate), s: getStatus(r.expiryDate)})).filter(x => x.s !== 'VALID').sort((a, b) => a.d - b.d);
+  return records.map(r => ({r, d: daysLeft(r.expiryDate), s: getStatus(r.expiryDate)})).filter(x => x.s !== 'VALID' && life(x.r).cur).sort((a, b) => a.d - b.d);
 }
 function alertListHtml(items) {
   return items.map(({r, d, s}) => {
@@ -677,7 +788,7 @@ function alertListHtml(items) {
 }
 function renderAlerts() {
   const a = alertItems(), box = $('alerts-panel');
-  if (!a.length) { box.innerHTML = ''; return; }
+  if (!a.length) { box.innerHTML = records.length ? '<div class="bg-white rounded-2xl shadow-sm border border-emerald-200 p-4 flex items-center gap-2 text-sm text-emerald-700"><i class="fa-solid fa-circle-check"></i><span class="font-semibold">No documents currently need attention.</span><span class="text-xs text-slate-500">Renewed and archived records are in history.</span></div>' : ''; return; }
   const ex = a.filter(x => x.s === 'EXPIRED').length;
   box.innerHTML = `<div class="bg-white rounded-2xl shadow-sm border border-rose-200 p-4"><div class="flex items-center gap-2 mb-3"><i class="fa-solid fa-bell text-rose-600"></i><h2 class="font-bold text-slate-900">Expiry Alerts</h2><span class="text-xs text-slate-500">${ex} expired · ${a.length - ex} expiring within 30 days · all categories</span></div><div class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">${alertListHtml(a)}</div></div>`;
 }
@@ -686,7 +797,7 @@ function renderAlerts() {
 function renderAnalytics() {
   const cats = [...new Set([...CATEGORIES, ...records.map(r => r.category)])];
   const st = Object.fromEntries(cats.map(c => [c, {VALID: 0, EXPIRING: 0, EXPIRED: 0}]));
-  records.forEach(r => st[r.category][getStatus(r.expiryDate)]++);
+  records.forEach(r => { const L = life(r); if (L.cur) st[r.category][L.raw]++; });
   $('cat-cards').innerHTML = cats.map(c => { const x = st[c], n = x.VALID + x.EXPIRING + x.EXPIRED;
     return `<button onclick="$('category-filter').value='${esc(c)}';filterRecords();$('records-container').scrollIntoView({behavior:'smooth'})" class="w-full text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-xl px-3 py-2"><div class="flex justify-between text-sm font-semibold"><span>${esc(c)}</span><span class="text-slate-400">${n}</span></div><div class="text-xs mt-0.5"><span class="text-emerald-600">${x.VALID} valid</span> · <span class="text-amber-600">${x.EXPIRING} expiring</span> · <span class="text-rose-600">${x.EXPIRED} expired</span></div></button>`; }).join('');
   if (typeof Chart === 'undefined') return;
@@ -765,7 +876,7 @@ function recRow(r, extra = '') {
   const d = daysLeft(r.expiryDate);
   return `<div onclick="openDetail('${r.id}')" class="cursor-pointer flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-indigo-50 hover:border-indigo-300 transition">
     <div class="min-w-0"><span class="font-mono font-bold text-sm">${esc(r.plate)}</span> <span class="text-xs text-slate-500">· ${esc(r.category)}</span>${extra}<p class="text-xs text-slate-400 truncate">${esc(r.details || r.remarks || '')}</p></div>
-    <div class="text-right shrink-0">${badge(r)}<p class="text-xs text-slate-500 mt-1">${dueText(d)} · ${esc(r.expiryDate)}</p></div></div>`;
+    <div class="text-right shrink-0">${badge(r)}<p class="text-xs text-slate-500 mt-1">${life(r).sup ? 'Expiry' : dueText(d)} · ${esc(r.expiryDate)}</p></div></div>`;
 }
 
 // ---- list modal (used by dashboard widgets) ----
@@ -784,7 +895,7 @@ function openKpi(kind) {
     if (kind === 'total') {
       const rows = fleet.map(t => {
         const rs = sameTruck(t.plate), c = {EXPIRED: 0, EXPIRING: 0};
-        rs.forEach(r => { const s = getStatus(r.expiryDate); if (c[s] !== undefined) c[s]++; });
+        rs.forEach(r => { const L = life(r); if (L.cur && c[L.raw] !== undefined) c[L.raw]++; });
         return `<button data-p="${esc(t.plate)}" onclick="viewTruck(this.dataset.p)" class="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-indigo-50 hover:border-indigo-300 transition">
           <div><span class="font-mono font-bold text-sm">${esc(t.plate)}</span>${truckInfo(t.plate)}</div>
           <div class="text-xs text-right"><span class="text-slate-500">${rs.length} record${rs.length === 1 ? '' : 's'}</span>${c.EXPIRED ? ` · <span class="text-rose-600 font-semibold">${c.EXPIRED} expired</span>` : ''}${c.EXPIRING ? ` · <span class="text-amber-600 font-semibold">${c.EXPIRING} expiring</span>` : ''}</div></button>`;
@@ -795,7 +906,7 @@ function openKpi(kind) {
       const rs = records.filter(r => (r.files || []).length).sort(byExpiry);
       return {title: 'Scanned Files', sub: `${rs.length} records with scans · click a record for details`, html: rs.map(r => recRow(r, ` <span class="text-xs text-blue-600"><i class="fa-solid fa-paperclip"></i> ${r.files.length}</span>`)).join('')};
     }
-    const S = kind.toUpperCase(), rs = records.filter(r => getStatus(r.expiryDate) === S).sort(byExpiry);
+    const S = kind.toUpperCase(), rs = records.filter(r => life(r).cur && life(r).raw === S).sort(byExpiry);
     const name = {VALID: 'Valid Active', EXPIRING: 'Expiring Soon (within 30 days)', EXPIRED: 'Expired'}[S];
     return {title: name, sub: `${rs.length} record${rs.length === 1 ? '' : 's'} · click a record for details`, html: rs.map(r => recRow(r)).join('')};
   });
@@ -823,7 +934,8 @@ function renderDetail() {
   $('detail-body').innerHTML = `
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div><p class="font-mono font-bold text-xl text-slate-900">${esc(r.plate)}</p>${t && (t.model || t.year) ? `<p class="text-xs text-slate-400">${esc([t.model, t.year].filter(Boolean).join(' · '))}</p>` : ''}</div>
-      <div class="text-right">${badge(r)}<p class="text-xs text-slate-500 mt-1">${dueText(d)}</p></div></div>
+      <div class="text-right">${badge(r)}<p class="text-xs text-slate-500 mt-1">${lifeNote(r, d)}</p></div></div>
+    ${life(r).sup ? `<div class="flex flex-wrap items-center justify-between gap-2 bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600"><span><i class="fa-solid fa-clock-rotate-left mr-1"></i>Superseded - this ${esc(r.category)} was renewed. Kept for audit; it no longer counts as an outstanding expiry.</span><button onclick="openDetail('${life(r).by.id}')" class="font-semibold text-indigo-600 hover:underline">View current record</button></div>` : ''}
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
       ${f('Category', esc(r.category))}${f('Queue No.', esc(r.queueNo), true)}${f('Date', esc(r.issueDate))}
       ${f('Expiry Date', esc(r.expiryDate))}${f(chq ? 'Cheque Amount' : 'Premium Due', r.cost ? money(r.cost) : '', true)}${f('Outstanding', r.cost ? money(Math.max(bal, 0)) : '', true)}
@@ -854,14 +966,12 @@ document.addEventListener('keydown', e => {
 
 // ---- insurance watch (dashboard) ----
 function insuranceWatch() {
-  const ins = records.filter(r => r.category === 'Insurance');
-  const latest = {};
-  ins.forEach(r => { const k = plateKey(r.plate); if (!latest[k] || r.expiryDate > latest[k]) latest[k] = r.expiryDate; });
+  const all = records.filter(r => r.category === 'Insurance'), ins = all.filter(r => life(r).cur);   // latest policy per truck only
   const items = ins.map(r => {
     const d = daysLeft(r.expiryDate);
-    return {r, d, grp: d < 0 ? 'expired' : d <= 30 ? 'soon' : d <= INS_EARLY_DAYS ? 'early' : 'ok', newer: r.expiryDate < latest[plateKey(r.plate)] ? latest[plateKey(r.plate)] : ''};
+    return {r, d, grp: d < 0 ? 'expired' : d <= 30 ? 'soon' : d <= INS_EARLY_DAYS ? 'early' : 'ok', newer: ''};
   });
-  return {total: ins.length, items, watch: items.filter(x => x.grp !== 'ok').sort((a, b) => a.d - b.d)};
+  return {total: all.length, hidden: all.length - ins.length, items, watch: items.filter(x => x.grp !== 'ok').sort((a, b) => a.d - b.d)};
 }
 const INS_STYLE = {expired: 'bg-rose-50 border-rose-200 text-rose-700', soon: 'bg-amber-50 border-amber-200 text-amber-700', early: 'bg-sky-50 border-sky-200 text-sky-700'};
 function insRow({r, d, grp, newer}) {
@@ -874,7 +984,7 @@ function renderInsurance() {
   const box = $('insurance-panel'), w = insuranceWatch();
   const n = g => w.items.filter(x => x.grp === g).length;
   const widget = (g, label, sub, c) => `<button onclick="openInsurance('${g}')" class="text-left rounded-xl border px-3 py-2 hover:shadow-md transition ${c}"><p class="text-[11px] font-bold uppercase tracking-wider">${label}</p><p class="text-2xl font-bold">${n(g)}</p><p class="text-[11px] opacity-80">${sub}</p></button>`;
-  const list = w.watch.length ? w.watch.map(insRow).join('') : `<p class="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-3"><i class="fa-solid fa-circle-check mr-1"></i>${w.total ? `No insurance expires within ${INS_EARLY_DAYS} days.` : 'No insurance records on the register yet.'}</p>`;
+  const list = w.watch.length ? w.watch.map(insRow).join('') : `<p class="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-3"><i class="fa-solid fa-circle-check mr-1"></i>${w.total ? `No insurance expires within ${INS_EARLY_DAYS} days.${w.hidden ? ` (${w.hidden} older polic${w.hidden === 1 ? 'y' : 'ies'} in history)` : ''}` : 'No insurance records on the register yet.'}</p>`;
   box.innerHTML = `<div class="bg-white rounded-2xl shadow-sm border border-sky-200 p-4">
     <div class="flex flex-wrap items-center gap-2 mb-3"><i class="fa-solid fa-car-burst text-sky-600"></i><h2 class="font-bold text-slate-900">Insurance Watch</h2><span class="text-xs text-slate-500">expired and expiring within ${INS_EARLY_DAYS} days · click a widget or a row for details</span></div>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
